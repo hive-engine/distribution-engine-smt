@@ -130,6 +130,8 @@ if __name__ == "__main__":
                         transfer_token = contractPayload["symbol"]
                         if "to" not in contractPayload:
                             continue
+                        if not isinstance(transfer_token, str):
+                            continue
                         if transfer_token not in token_metadata["config"]:
                             continue
                         transfer_token_config = token_metadata["config"][transfer_token]
