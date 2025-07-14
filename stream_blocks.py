@@ -7,10 +7,9 @@ from datetime import datetime, timezone
 
 import dataset
 from nectar import Hive
+from nectar.block import Blocks
 from nectar.blockchain import Blockchain
-from nectar.utils import (
-    construct_authorperm,
-)
+from nectar.utils import construct_authorperm
 from nectarengine.api import Api
 
 from engine.config_storage import ConfigurationDB
@@ -43,29 +42,45 @@ def process_op(ops):
         confStorage, \
         db
 
-    if ops["block_num"] - current_block_num > 1:
+    current_op_block_num = ops["block_num"]
+    current_op_timestamp = ops["timestamp"]
+
+    if current_op_block_num - current_block_num > 1:
         print(
-            "Skip block last block %d - now %d" % (current_block_num, ops["block_num"])
+            "Skip block last block %d - now %d" % (current_block_num, current_op_block_num)
         )
-    elif ops["block_num"] - current_block_num == 1:
-        print("Current block %d" % ops["block_num"])
+    elif current_op_block_num - current_block_num == 1:
+        print("Current block %d" % current_op_block_num)
 
-    current_block_num = ops["block_num"]
-    timestamp = ops["timestamp"]
+    current_block_num = current_op_block_num
 
-    delay_min = (datetime.now(timezone.utc) - timestamp).total_seconds() / 60
-    delay_sec = int((datetime.now(timezone.utc) - timestamp).total_seconds())
+    delay_min = (datetime.now(timezone.utc) - current_op_timestamp).total_seconds() / 60
+    delay_sec = int((datetime.now(timezone.utc) - current_op_timestamp).total_seconds())
 
     if delay_sec < 15:
         print(f"Blocks too recent {delay_sec} ago, waiting.")
+        confStorage.upsert(
+            {
+                "last_streamed_block": current_op_block_num,
+                "last_streamed_timestamp": current_op_timestamp,
+            }
+        )
+        db.commit()
         return False
     if (
         not last_engine_streamed_timestamp
-        or timestamp >= last_engine_streamed_timestamp
+        or current_op_timestamp >= last_engine_streamed_timestamp
     ):
         print(
             f"Waiting for engine refblock to catch up to {last_engine_streamed_timestamp}"
         )
+        confStorage.upsert(
+            {
+                "last_streamed_block": current_op_block_num,
+                "last_streamed_timestamp": current_op_timestamp,
+            }
+        )
+        db.commit()
         return False
 
     if delay_min < 1:
@@ -73,8 +88,7 @@ def process_op(ops):
     else:
         delay_string = "(+ %.1f min)" % (delay_min)
 
-    last_streamed_timestamp = timestamp
-    if ops["block_num"] > last_streamed_block:
+    if current_op_block_num > last_streamed_block:
         if len(token_config) > 0:
             print(
                 "%s: Block processing took %.2f s"
@@ -94,7 +108,8 @@ def process_op(ops):
             db.commit()
         db.begin()
 
-    last_streamed_block = ops["block_num"]
+    last_streamed_block = current_op_block_num
+    last_streamed_timestamp = current_op_timestamp
 
     if ops["block_num"] - last_block_print > 20:
         last_block_print = ops["block_num"]
@@ -168,8 +183,6 @@ if __name__ == "__main__":
     hived = Hive(node=node_list, num_retries=5, call_num_retries=3, timeout=15)
     print("using node %s" % hived.rpc.url)
     b = Blockchain(mode="head", max_block_wait_repetition=27, steem_instance=hived)
-    
-    
 
     while True:
         try:
@@ -187,7 +200,9 @@ if __name__ == "__main__":
             last_engine_streamed_timestamp = None
             engine_conf = confStorage.get_engine()
             if engine_conf:
-                last_engine_streamed_timestamp = engine_conf["last_engine_streamed_timestamp"].replace(tzinfo=timezone.utc)
+                last_engine_streamed_timestamp = engine_conf[
+                    "last_engine_streamed_timestamp"
+                ].replace(tzinfo=timezone.utc)
 
             if last_streamed_block == 0:
                 start_block = current_block_num
@@ -209,7 +224,9 @@ if __name__ == "__main__":
             token_metadata = initialize_token_metadata(token_config, engine_api)
 
             # Processors
-            comment_processor_for_engine = CommentProcessorForEngine(db, hived, token_metadata)
+            comment_processor_for_engine = CommentProcessorForEngine(
+                db, hived, token_metadata
+            )
             reblog_processor = ReblogProcessor(db, token_metadata)
             follow_processor = FollowProcessor(db, token_metadata)
             set_tribe_settings_processor = SetTribeSettingsProcessor(db, token_metadata)
@@ -218,8 +235,6 @@ if __name__ == "__main__":
 
             # Batch processing logic
             if stop_block - start_block > 10:
-                from nectar.block import Blocks
-
                 print("Starting batch processing...")
 
                 blocks_generator = Blocks(
@@ -232,8 +247,8 @@ if __name__ == "__main__":
 
                 for block in blocks_generator:
                     for op in block.operations:
-                        op_dict = op['value']
-                        op_dict['type'] = op['type'].replace("_operation", "")
+                        op_dict = op["value"]
+                        op_dict["type"] = op["type"].replace("_operation", "")
                         op_dict["block_num"] = block.block_num
                         op_dict["timestamp"] = block["timestamp"]
                         if not process_op(op_dict):
@@ -264,3 +279,4 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             print("Exiting...")
             break
+
