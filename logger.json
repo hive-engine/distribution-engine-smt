@@ -16,7 +16,7 @@
         }
     },
     "loggers": {
-        "beemapi.node": {
+        "nectarapi.node": {
             "level": "ERROR",
             "handlers": ["default"],
             "propagate": false

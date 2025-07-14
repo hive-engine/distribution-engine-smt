@@ -1,51 +1,37 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-from beem.utils import formatTimeString, resolve_authorperm, construct_authorperm, addTzInfo, parse_time
-from beem.nodelist import NodeList
-from beem.comment import Comment
-from beem import Hive
-from datetime import datetime, timedelta
-from beem.instance import set_shared_steem_instance
-from beem.blockchain import Blockchain
-from beem.block import Block
-from beem.account import Account
-from beem.amount import Amount
-from beem.memo import Memo
-import time
 import json
-import os
-import sys
-import math
-import dataset
-import random
 import logging
 import logging.config
+import os
+import time
 import traceback
-from datetime import date, datetime, timedelta
-from dateutil.parser import parse
-from decimal import Decimal
+
+import dataset
+from dotenv import load_dotenv
+from nectar.utils import parse_time
+from nectarengine.api import Api
+
 from engine.config_storage import ConfigurationDB
 from engine.token_config_storage import TokenConfigDB
-from engine.version import version as engineversion
-from engine.utils import setup_logging, int_sqrt, int_pow, _score, convergent_linear, convergent_square_root, initialize_config, initialize_token_metadata
+from engine.utils import initialize_config, initialize_token_metadata, setup_logging
 from processors.engine_comments_contract_processor import CommentsContractProcessor
 from processors.engine_promote_post_processor import PromotePostProcessor
-from steemengine.api import Api
-from beem.block import Block
-import hashlib
-import random
-import base36
-import dataset
-import re
+load_dotenv()
+
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
 
-if __name__ == "__main__":
-    setup_logging('logger.json')
+# Flag to enable bulk sidechain block fetching (up to 1000 at a time)
+ENABLE_BULK_BLOCKS = os.getenv("ENGINE_BULK_BLOCKS", "false").lower() in {"1", "true", "yes"}
 
-    config_file = 'config.json'
+if __name__ == "__main__":
+    setup_logging("logger.json")
+
+    config_file = "config.json"
     config_data = initialize_config(config_file)
     databaseConnector = config_data["databaseConnector"]
     engine_api = Api(url=config_data["engine_api"])
@@ -95,21 +81,15 @@ if __name__ == "__main__":
     promote_post_processor = PromotePostProcessor(db, token_metadata)
     comments_processor = CommentsContractProcessor(db, engine_api, token_metadata)
 
-    for current_block_num in range(start_block, stop_block):
-        current_block = engine_api.get_block_info(current_block_num)
-        print(f"Processing engine block {current_block_num}")
-        timestamp = parse_time(current_block["timestamp"]).replace(tzinfo=None)
-        last_engine_streamed_timestamp = timestamp
-        main_chain_block_num = current_block["refHiveBlockNumber"]
+    def process_engine_block(block_dict):
+        """Process a single sidechain block returned by the engine API."""
+        timestamp = parse_time(block_dict["timestamp"])
 
         db.begin()
-
-        if not current_block["transactions"]:
-            print(f"No transactions in block.")
+        if not block_dict["transactions"]:
+            print("No transactions in block.")
         else:
-            for op in current_block["transactions"]:
-                tx_id = op["transactionId"]
-
+            for op in block_dict["transactions"]:
                 contract_action = op["action"]
                 contractPayload = op["payload"]
                 try:
@@ -119,28 +99,60 @@ if __name__ == "__main__":
                         comments_processor.process(op, contractPayload, timestamp)
                         continue
                     elif op["contract"] == "tokens" and contract_action == "transfer":
-                        if "memo" not in contractPayload or contractPayload["memo"] is None:
+                        if (
+                            "memo" not in contractPayload
+                            or contractPayload["memo"] is None
+                        ):
                             print("No memo field in contractPayload")
                             continue
                         memo = contractPayload["memo"]
                         if not isinstance(memo, str) or len(memo) < 3:
-                            continue
+                            return
                         if "symbol" not in contractPayload:
-                            continue
+                            return
                         transfer_token = contractPayload["symbol"]
                         if "to" not in contractPayload:
-                            continue
+                            return
                         if not isinstance(transfer_token, str):
-                            continue
+                            return
                         if transfer_token not in token_metadata["config"]:
-                            continue
+                            return
                         transfer_token_config = token_metadata["config"][transfer_token]
                         if transfer_token_config is not None and memo.find("@") > -1:
-                            if contractPayload["to"] == transfer_token_config["promoted_post_account"]:
+                            if (
+                                contractPayload["to"]
+                                == transfer_token_config["promoted_post_account"]
+                            ):
                                 promote_post_processor.process(op, contractPayload)
-                except Exception as e:
+                except Exception:
                     traceback.print_exc()
                     raise "Error"
 
-        confStorage.upsert_engine({"last_engine_streamed_block": current_block_num, "last_engine_streamed_timestamp": last_engine_streamed_timestamp})
+        confStorage.upsert_engine(
+            {
+                "last_engine_streamed_block": block_dict["blockNumber"],
+                "last_engine_streamed_timestamp": timestamp,
+            }
+        )
         db.commit()
+
+    if ENABLE_BULK_BLOCKS:
+        print("Bulk block fetching ENABLED. Fetching sidechain blocks in chunks of 1000 …")
+        CHUNK_SIZE = 1000
+        current = start_block
+        while current < stop_block:
+            count = min(CHUNK_SIZE, stop_block - current)
+            try:
+                block_range = engine_api.get_block_range_info(current, count)
+            except Exception:
+                # Fall back to single-block fetch on error
+                traceback.print_exc()
+                block_range = []
+            for block_dict in block_range:
+                process_engine_block(block_dict)
+            current += count
+    else:
+        for current_block_num in range(start_block, stop_block):
+            current_block = engine_api.get_block_info(current_block_num)
+            print(f"Processing engine block {current_block_num}")
+            process_engine_block(current_block)

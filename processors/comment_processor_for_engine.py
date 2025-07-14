@@ -1,21 +1,18 @@
 # This Python file uses the following encoding: utf-8
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-from beem.amount import Amount
-from beem.comment import Comment
-from beem.utils import resolve_authorperm, construct_authorperm
-from datetime import datetime, timedelta
-from diff_match_patch import diff_match_patch
-from engine.account_storage import AccountsDB
-from engine.post_storage import PostsTrx
-from engine.post_metadata_storage import PostMetadataStorage
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import json
+import logging
 import time
 import traceback
 
-import logging
+from diff_match_patch import diff_match_patch
+from nectar.comment import Comment
+from nectar.utils import construct_authorperm
+
+from engine.account_storage import AccountsDB
+from engine.post_metadata_storage import PostMetadataStorage
+from engine.post_storage import PostsTrx
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -23,8 +20,7 @@ log.addHandler(logging.StreamHandler())
 
 
 class CommentProcessorForEngine(object):
-    """ Processor for handling comment operations for engine comments.
-    """
+    """Processor for handling comment operations for engine comments."""
 
     def __init__(self, db, hived, token_metadata):
         self.db = db
@@ -35,10 +31,9 @@ class CommentProcessorForEngine(object):
         self.token_metadata = token_metadata
 
     def process(self, ops):
-        """ Main process method.
-        """
+        """Main process method."""
         token_config = self.token_metadata["config"]
-        timestamp = ops["timestamp"].replace(tzinfo=None)
+        timestamp = ops["timestamp"]
 
         posts_list = []
         post_metadata_list = []
@@ -50,13 +45,13 @@ class CommentProcessorForEngine(object):
         parent_json_metadata = None
         parent_posts = None
 
-        main_post = ops['parent_permlink'] == "" or ops['parent_author'] == ""
+        main_post = ops["parent_permlink"] == "" or ops["parent_author"] == ""
 
         json_metadata = {}
         posts = self.postTrx.get_post(authorperm)
 
         decline_payout = False
-        
+
         if "title" in ops:
             title = ops["title"]
         else:
@@ -66,7 +61,7 @@ class CommentProcessorForEngine(object):
             json_metadata = json.loads(ops["json_metadata"])
             if isinstance(json_metadata, str):
                 json_metadata = json.loads(json_metadata)
-        except:
+        except Exception:
             print("Metadata error for %s" % authorperm)
             json_metadata = {}
 
@@ -76,7 +71,11 @@ class CommentProcessorForEngine(object):
 
         tags_set = set()
         tags = ""
-        if main_post and ops["parent_permlink"] != "" and "," not in ops["parent_permlink"]:
+        if (
+            main_post
+            and ops["parent_permlink"] != ""
+            and "," not in ops["parent_permlink"]
+        ):
             # hived repurposes this for category, and it may overlap with tags
             tags_set.add(ops["parent_permlink"])
             tags = ops["parent_permlink"]
@@ -93,9 +92,11 @@ class CommentProcessorForEngine(object):
 
         parent_authorperm = None
         if not main_post:
-            parent_authorperm = f"{construct_authorperm(ops['parent_author'], ops['parent_permlink'])}"
+            parent_authorperm = (
+                f"{construct_authorperm(ops['parent_author'], ops['parent_permlink'])}"
+            )
             parent_posts = self.postTrx.get_post(parent_authorperm)
-            
+
         app = None
 
         if posts is not None and len(posts) > 0:
@@ -125,11 +126,11 @@ class CommentProcessorForEngine(object):
                         while c is None and cnt < 5:
                             cnt += 1
                             try:
-                                if cnt <= 2:
-                                    c = Comment(authorperm, api="bridge", steem_instance=self.hived)
-                                else:
-                                    c = Comment(authorperm, api="condenser", steem_instance=self.hived)
-                            except Exception as e:
+                                c = Comment(
+                                    authorperm,
+                                    blockchain_instance=self.hived,
+                                )
+                            except Exception:
                                 print(f"Attempt {cnt}: Could not fetch comment")
                                 traceback.print_exc()
                                 c = None
@@ -139,7 +140,7 @@ class CommentProcessorForEngine(object):
                             new_body = ops["body"]
                     else:
                         new_body = ops["body"]
-                except Exception as ex:
+                except Exception:
                     new_body = ops["body"]
 
             desc = new_body[:300]
@@ -148,12 +149,28 @@ class CommentProcessorForEngine(object):
 
             for post in posts:
                 token = post["token"]
-                posts_list.append({"authorperm": authorperm, "token": token, "title": title[:256], "desc": desc, "tags": tags[:256], "parent_author": ops["parent_author"], "parent_permlink": ops["parent_permlink"], "main_post": main_post, "children": children})
+                posts_list.append(
+                    {
+                        "authorperm": authorperm,
+                        "token": token,
+                        "title": title[:256],
+                        "desc": desc,
+                        "tags": tags[:256],
+                        "parent_author": ops["parent_author"],
+                        "parent_permlink": ops["parent_permlink"],
+                        "main_post": main_post,
+                        "children": children,
+                    }
+                )
 
             if main_post:
-                self.accountsStorage.upsert({"name": post_author, "symbol": token, "last_root_post": timestamp})
+                self.accountsStorage.upsert(
+                    {"name": post_author, "symbol": token, "last_root_post": timestamp}
+                )
             else:
-                self.accountsStorage.upsert({"name": post_author, "symbol": token, "last_post": timestamp})
+                self.accountsStorage.upsert(
+                    {"name": post_author, "symbol": token, "last_post": timestamp}
+                )
             if parent_posts is not None:
                 for parent_post in parent_posts:
                     children = parent_post["children"]
@@ -161,18 +178,32 @@ class CommentProcessorForEngine(object):
                         children += 1
                     else:
                         children = 1
-                    posts_list.append({"authorperm": parent_post["authorperm"], "token": parent_post["token"],
-                                       "children": children})
-            post_metadata = {"authorperm": authorperm, "body": new_body, "json_metadata": json.dumps(json_metadata), "parent_authorperm": parent_authorperm, "title": title, "tags": tags}
-            if ops['parent_author'] and ops['parent_permlink']:
+                    posts_list.append(
+                        {
+                            "authorperm": parent_post["authorperm"],
+                            "token": parent_post["token"],
+                            "children": children,
+                        }
+                    )
+            post_metadata = {
+                "authorperm": authorperm,
+                "body": new_body,
+                "json_metadata": json.dumps(json_metadata),
+                "parent_authorperm": parent_authorperm,
+                "title": title,
+                "tags": tags,
+            }
+            if ops["parent_author"] and ops["parent_permlink"]:
                 parent_post_metadata = self.postMetadataStorage.get(parent_authorperm)
                 if parent_post_metadata:
-                    children = parent_post_metadata['children']
+                    children = parent_post_metadata["children"]
                     if children is not None:
                         children += 1
                     else:
                         children = 1
-                    self.postMetadataStorage.upsert({"authorperm": parent_authorperm, "children": children})
+                    self.postMetadataStorage.upsert(
+                        {"authorperm": parent_authorperm, "children": children}
+                    )
                     if parent_post_metadata["depth"] is not None:
                         post_metadata["depth"] = parent_post_metadata["depth"] + 1
                     if parent_post_metadata["url"] is not None:
@@ -186,4 +217,7 @@ class CommentProcessorForEngine(object):
         if len(posts_list) > 0:
             self.postTrx.add_batch(posts_list)
 
-        print("Adding comment/post (engine) took %.2f s" % (time.time() - comment_start_time))
+        print(
+            "Adding comment/post (engine) took %.2f s"
+            % (time.time() - comment_start_time)
+        )

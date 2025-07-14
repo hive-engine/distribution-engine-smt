@@ -1,38 +1,32 @@
 # This Python file uses the following encoding: utf-8
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-from beem.constants import STEEM_100_PERCENT
-from beem.utils import resolve_authorperm, construct_authorperm
-from datetime import datetime, timedelta
-from decimal import Decimal
-from engine.account_storage import AccountsDB
-from engine.post_storage import PostsTrx
-from engine.vote_storage import VotesTrx
-from engine.utils import _score
-from processors.custom_json_processor import CustomJsonProcessor, extract_user, check_engine_op
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import json
-import re
-import time
-import traceback
 import logging
+import re
+import traceback
+from decimal import Decimal
+
+
+from engine.utils import _score
+from processors.custom_json_processor import (
+    CustomJsonProcessor,
+    check_engine_op,
+)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 log.addHandler(logging.StreamHandler())
 
+
 class PromotePostProcessor(CustomJsonProcessor):
-    """ Processor for post promotion operations.
-    """
+    """Processor for post promotion operations."""
 
     def __init__(self, db, token_metadata):
         super().__init__(db, token_metadata)
 
-
     def process(self, op, contractPayload):
-        """ Main process method.
-        """
+        """Main process method."""
         token_config = self.token_metadata["config"]
         print(json.dumps(contractPayload))
 
@@ -75,7 +69,10 @@ class PromotePostProcessor(CustomJsonProcessor):
             else:
                 authorperm = memo[at_sign_position:]
 
-                print("Transfer to null with memo %s and token %s detected" % (authorperm, transfer_token))
+                print(
+                    "Transfer to null with memo %s and token %s detected"
+                    % (authorperm, transfer_token)
+                )
                 posts = self.postTrx.get_post(authorperm)
                 promoted = 0
                 _timestamp = 0
@@ -85,8 +82,8 @@ class PromotePostProcessor(CustomJsonProcessor):
                         if token == transfer_token:
                             promotion_success = True
                             promoted = Decimal(post["promoted"])
-                            _timestamp = post['created'].timestamp()
-        except Exception as e:
+                            _timestamp = post["created"].timestamp()
+        except Exception:
             traceback.print_exc()
 
         if promotion_success:
@@ -94,7 +91,14 @@ class PromotePostProcessor(CustomJsonProcessor):
             promoted = promoted + promoted_amount
 
             sc_promoted = _score(promoted, _timestamp, 480000)
-            self.postTrx.update({"authorperm": authorperm, "token": transfer_token, "promoted": promoted,
-                                 "score_promoted": sc_promoted})
-            print("%s was promoted with %.2f %s" % (authorperm, quantity, transfer_token))
-
+            self.postTrx.update(
+                {
+                    "authorperm": authorperm,
+                    "token": transfer_token,
+                    "promoted": promoted,
+                    "score_promoted": sc_promoted,
+                }
+            )
+            print(
+                "%s was promoted with %.2f %s" % (authorperm, quantity, transfer_token)
+            )

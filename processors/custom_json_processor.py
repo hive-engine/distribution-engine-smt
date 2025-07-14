@@ -1,62 +1,56 @@
 # This Python file uses the following encoding: utf-8
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-from beem.constants import STEEM_100_PERCENT
-from beem.utils import resolve_authorperm, construct_authorperm
-from decimal import Decimal
-from engine.account_storage import AccountsDB
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+import json
+import logging
+import traceback
+
+
 from engine.account_history_storage import AccountHistoryTrx
+from engine.account_storage import AccountsDB
 from engine.follow_storage import FollowsDB
-from engine.reblog_storage import ReblogsDB
 from engine.post_storage import PostsTrx
+from engine.reblog_storage import ReblogsDB
 from engine.token_config_storage import TokenConfigDB
 from engine.vote_storage import VotesTrx
-from engine.utils import _score
-import json
-import time
-import traceback
-import logging
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 log.addHandler(logging.StreamHandler())
 
+
 def extract_json_data(ops):
-    """ Extract JSON data.
-    """
+    """Extract JSON data."""
     json_data = None
     try:
-        json_data = json.loads(ops['json'])
+        json_data = json.loads(ops["json"])
         if isinstance(json_data, str):
             json_data = json.loads(json_data)
     except:
         traceback.print_exc()
-        print("Skip json: %s" % str(ops['json']))
+        print("Skip json: %s" % str(ops["json"]))
     return json_data
 
 
 def extract_user(ops, json_data):
-    """ Extract user from JSON data.
-    """
+    """Extract user from JSON data."""
     if json_data is None:
         return None
-    if 'required_posting_auths' not in ops or 'required_auths' not in ops:
+    if "required_posting_auths" not in ops or "required_auths" not in ops:
         return None
-    if ops['required_posting_auths'] is None or ops['required_auths'] is None:
+    if ops["required_posting_auths"] is None or ops["required_auths"] is None:
         return None
-    if len(ops['required_posting_auths']) > 0:
-        return ops['required_posting_auths'][0]
-    elif len(ops['required_auths']) > 0:
-        return ops['required_auths'][0]
+    if len(ops["required_posting_auths"]) > 0:
+        return ops["required_posting_auths"][0]
+    elif len(ops["required_auths"]) > 0:
+        return ops["required_auths"][0]
     else:
         print("Cannot parse transaction, as user could not be determined!")
     return None
 
+
 def check_engine_op(op):
-    """Check Engine API transaction.
-    """
+    """Check Engine API transaction."""
     if op is not None and "logs" in op:
         logs = json.loads(op["logs"])
         if isinstance(logs, str):
@@ -73,9 +67,9 @@ def check_engine_op(op):
     print("Op has no logs.")
     return True
 
+
 class CustomJsonProcessor(object):
-    """ Base processor for handling custom json operations.
-    """
+    """Base processor for handling custom json operations."""
 
     def __init__(self, db, token_metadata):
         self.db = db
@@ -87,4 +81,3 @@ class CustomJsonProcessor(object):
         self.tokenConfigStorage = TokenConfigDB(db)
         self.accountHistoryTrx = AccountHistoryTrx(db)
         self.token_metadata = token_metadata
-
