@@ -243,20 +243,22 @@ if __name__ == "__main__":
                 current_block_num = b.get_current_block_num()
                 start_block = last_streamed_block + 1
                 stop_block = current_block_num
-                
+
                 if start_block >= stop_block:
                     print("Caught up. Waiting for new blocks...")
                     time.sleep(3)
                     continue
-                
+
                 print(f"Processing blocks {start_block} - {stop_block}")
                 current_batch_start = start_block
-                
+
                 while current_batch_start <= stop_block:
                     current_batch_end = min(
                         current_batch_start + BATCH_SIZE - 1, stop_block
                     )
-                    print(f"Processing batch {current_batch_start} - {current_batch_end}")
+                    print(
+                        f"Processing batch {current_batch_start} - {current_batch_end}"
+                    )
                     blocks_generator = Blocks(
                         starting_block_num=current_batch_start,
                         end_block=current_batch_end,

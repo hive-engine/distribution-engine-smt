@@ -1,12 +1,10 @@
 # This Python file uses the following encoding: utf-8
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import json
 import logging
 import re
 import traceback
 from decimal import Decimal
-
 
 from engine.utils import _score
 from processors.custom_json_processor import (
