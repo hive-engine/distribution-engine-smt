@@ -106,7 +106,7 @@ def token():
     """
     Fetch reward pool info for token
     """
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
 
     db = dataset.connect(databaseConnector, ensure_schema=False)
     tokenConfigStorage = TokenConfigDB(db)
@@ -162,7 +162,7 @@ def config():
     """
     Fetch token config
     """
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
 
     db = dataset.connect(databaseConnector, ensure_schema=False)
     try:
@@ -186,11 +186,11 @@ def get_account_history():
     """
     get_account_history
     """
-    account = request.args.get("account", None).lower()
+    account = request.args.get("account".lower(), None)
     if account is None:
         return jsonify({})
 
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
     limit = request.args.get("limit", 100)
     offset = request.args.get("offset", 0)
     hist_type = request.args.get("type", None)
@@ -246,7 +246,7 @@ def account(account):
     """
     Add a new rule
     """
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
     db = dataset.connect(databaseConnector, ensure_schema=False)
     try:
         accountsStorage = AccountsDB(db)
@@ -271,7 +271,7 @@ def authorperm(account, permlink):
     """
     Add a new rule
     """
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
     db = dataset.connect(databaseConnector, ensure_schema=False)
     try:
         authorperm = construct_authorperm(account, permlink)
@@ -312,7 +312,7 @@ def get_staked_accounts():
     """
     Get Staked Accounts via engine API
     """
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
     hive = request.args.get("hive", False)
     minAmount = request.args.get("minAmount", 1)
 
@@ -437,9 +437,9 @@ def get_thread():
     """
     Fetch posts and comments
     """
-    token = request.args.get("token", None).upper()
-    author = request.args.get("author", None).lower()
-    permlink = request.args.get("permlink", None).lower()
+    token = request.args.get("token".upper(), None)
+    author = request.args.get("author".lower(), None)
+    permlink = request.args.get("permlink".lower(), None)
     refresh = request.args.get("refresh", False)
 
     if token is None:
@@ -472,11 +472,11 @@ def get_feed():
     """
     Fetch user's feed
     """
-    token = request.args.get("token", None).upper()
-    account = request.args.get("tag", None).lower()
+    token = request.args.get("token".upper(), None)
+    account = request.args.get("tag".lower(), None)
     limit = request.args.get("limit", 20)
-    start_author = request.args.get("start_author", None).lower()
-    start_permlink = request.args.get("start_permlink", None).lower()
+    start_author = request.args.get("start_author".lower(), None)
+    start_permlink = request.args.get("start_permlink".lower(), None)
     include_reblogs = request.args.get("include_reblogs", True)
     fetch_votes = not request.args.get("no_votes", False)
     fetch_votes = request.args.get("voter", fetch_votes)
@@ -532,11 +532,11 @@ def get_feed():
 
 @app.route("/get_discussions_by_created", methods=["GET"])
 def get_discussions_by_created():
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
     limit = request.args.get("limit", 20)
     tag = request.args.get("tag", None)
-    start_author = request.args.get("start_author", None).lower()
-    start_permlink = request.args.get("start_permlink", None).lower()
+    start_author = request.args.get("start_author".lower(), None)
+    start_permlink = request.args.get("start_permlink".lower(), None)
     fetch_votes = not request.args.get("no_votes", False)
     fetch_votes = request.args.get("voter", fetch_votes)
     try:
@@ -572,11 +572,11 @@ def get_discussions_by_created():
 
 
 def get_discussions_by_score(request, score_key, main_post=True):
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
     limit = request.args.get("limit", 20)
     tag = request.args.get("tag", None)
-    start_author = request.args.get("start_author", None).lower()
-    start_permlink = request.args.get("start_permlink", None).lower()
+    start_author = request.args.get("start_author".lower(), None)
+    start_permlink = request.args.get("start_permlink".lower(), None)
     fetch_votes = not request.args.get("no_votes", False)
     fetch_votes = request.args.get("voter", fetch_votes)
     try:
@@ -644,12 +644,12 @@ def get_discussions_by_blog():
     """
     Add a new rule
     """
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
     limit = request.args.get("limit", 20)
-    account = request.args.get("tag", None).lower()
+    account = request.args.get("tag".lower(), None)
     include_reblogs = request.args.get("include_reblogs", False)
-    start_author = request.args.get("start_author", None).lower()
-    start_permlink = request.args.get("start_permlink", None).lower()
+    start_author = request.args.get("start_author".lower(), None)
+    start_permlink = request.args.get("start_permlink".lower(), None)
     fetch_votes = not request.args.get("no_votes", False)
     fetch_votes = request.args.get("voter", fetch_votes)
 
@@ -704,11 +704,11 @@ def get_discussions_by_comments():
     """
     Get comments.
     """
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
     limit = request.args.get("limit", 20)
-    account = request.args.get("tag", None).lower()
-    start_author = request.args.get("start_author", None).lower()
-    start_permlink = request.args.get("start_permlink", None).lower()
+    account = request.args.get("tag".lower(), None)
+    start_author = request.args.get("start_author".lower(), None)
+    start_permlink = request.args.get("start_permlink".lower(), None)
     fetch_votes = not request.args.get("no_votes", False)
     fetch_votes = request.args.get("voter", fetch_votes)
 
@@ -752,11 +752,11 @@ def get_discussions_by_replies():
     """
     Get replies.
     """
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
     limit = request.args.get("limit", 20)
-    account = request.args.get("tag", None).lower()
-    start_author = request.args.get("start_author", None).lower()
-    start_permlink = request.args.get("start_permlink", None).lower()
+    account = request.args.get("tag".lower(), None)
+    start_author = request.args.get("start_author".lower(), None)
+    start_permlink = request.args.get("start_permlink".lower(), None)
     fetch_votes = not request.args.get("no_votes", False)
     fetch_votes = request.args.get("voter", fetch_votes)
 
@@ -801,7 +801,7 @@ def get_trending_tags():
     """
     Get trending tags.
     """
-    token = request.args.get("token", None).upper()
+    token = request.args.get("token".upper(), None)
     limit = request.args.get("limit", 40)
 
     try:
@@ -854,8 +854,8 @@ def get_following():
     Get following.
     """
     limit = request.args.get("limit", 1000)
-    follower = request.args.get("follower", None).lower()
-    following = request.args.get("following", None).lower()
+    follower = request.args.get("follower".lower(), None)
+    following = request.args.get("following".lower(), None)
     # For pagination, optional
     start = request.args.get("start", None)
     # Either "ignore" (muted), or "blog" (follow)
@@ -888,7 +888,7 @@ def get_follow_count():
     """
     Get follow count.
     """
-    account = request.args.get("account", None).lower()
+    account = request.args.get("account".lower(), None)
 
     db = dataset.connect(databaseConnector, ensure_schema=False)
     try:
