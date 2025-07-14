@@ -1,7 +1,7 @@
 #!/usr/bin/python3.8
 # -*- coding: utf-8 -*-
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import dataset
@@ -81,10 +81,10 @@ def state():
         hived_conf = confStorage.get()
         engine_conf = confStorage.get_engine()
         time_delay_seconds = (
-            datetime.utcnow() - hived_conf["last_streamed_timestamp"]
+            datetime.now(timezone.utc) - hived_conf["last_streamed_timestamp"]
         ).total_seconds()
         engine_time_delay_seconds = (
-            datetime.utcnow() - engine_conf["last_engine_streamed_timestamp"]
+            datetime.now(timezone.utc) - engine_conf["last_engine_streamed_timestamp"]
         ).total_seconds()
         data = {
             "last_streamed_block": hived_conf["last_streamed_block"],
@@ -197,11 +197,11 @@ def get_account_history():
 
     try:
         limit = int(limit)
-    except:
+    except Exception:
         return jsonify([])
     try:
         offset = int(offset)
-    except:
+    except Exception:
         return jsonify([])
 
     db = dataset.connect(databaseConnector, ensure_schema=False)
@@ -356,7 +356,7 @@ def format_feed_data(
         post["last_payout"] = formatTimeString(post["last_payout"])
         post["vote_rshares"] = Decimal(post["vote_rshares"])
         if fetch_votes:
-            if not fetch_votes or fetch_votes == True:
+            if not fetch_votes:
                 vote_list = votesTrx.get_token_vote(post["authorperm"], token)
             else:
                 voter_vote = votesTrx.get(post["authorperm"], fetch_votes, token)
@@ -483,7 +483,7 @@ def get_feed():
 
     try:
         limit = int(limit)
-    except:
+    except Exception:
         return jsonify([])
     if token is None:
         return jsonify([])
@@ -541,7 +541,7 @@ def get_discussions_by_created():
     fetch_votes = request.args.get("voter", fetch_votes)
     try:
         limit = int(limit)
-    except:
+    except Exception:
         return jsonify([])
     if token is None:
         return jsonify([])
@@ -581,7 +581,7 @@ def get_discussions_by_score(request, score_key, main_post=True):
     fetch_votes = request.args.get("voter", fetch_votes)
     try:
         limit = int(limit)
-    except:
+    except Exception:
         return jsonify([])
     if token is None:
         return jsonify([])
@@ -655,7 +655,7 @@ def get_discussions_by_blog():
 
     try:
         limit = int(limit)
-    except:
+    except Exception:
         return jsonify([])
     if token is None:
         return jsonify([])
@@ -714,7 +714,7 @@ def get_discussions_by_comments():
 
     try:
         limit = int(limit)
-    except:
+    except Exception:
         return jsonify([])
     if token is None:
         return jsonify([])
@@ -762,7 +762,7 @@ def get_discussions_by_replies():
 
     try:
         limit = int(limit)
-    except:
+    except Exception:
         return jsonify([])
     if token is None:
         return jsonify([])
@@ -806,7 +806,7 @@ def get_trending_tags():
 
     try:
         limit = int(limit)
-    except:
+    except Exception:
         return jsonify([])
     if token is None:
         return jsonify([])
@@ -831,7 +831,7 @@ def refresh_follows(db, account):
     if followRefreshTime is None:
         try:
             acc = Account(account, steem_instance=hived)
-        except:
+        except Exception:
             return
         following = acc.get_following()
 
@@ -864,7 +864,7 @@ def get_following():
 
     try:
         limit = int(limit)
-    except:
+    except Exception:
         return jsonify([])
 
     db = dataset.connect(databaseConnector, ensure_schema=False)
