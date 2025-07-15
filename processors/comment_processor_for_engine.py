@@ -31,25 +31,20 @@ class CommentProcessorForEngine(object):
 
     def process(self, ops):
         """Main process method."""
-        token_config = self.token_metadata["config"]
         timestamp = ops["timestamp"]
 
         posts_list = []
-        post_metadata_list = []
 
         comment_start_time = time.time()
 
         post_author = ops["author"]
         authorperm = construct_authorperm(ops)
-        parent_json_metadata = None
         parent_posts = None
 
         main_post = ops["parent_permlink"] == "" or ops["parent_author"] == ""
 
         json_metadata = {}
         posts = self.postTrx.get_post(authorperm)
-
-        decline_payout = False
 
         if "title" in ops:
             title = ops["title"]
@@ -96,15 +91,7 @@ class CommentProcessorForEngine(object):
             )
             parent_posts = self.postTrx.get_post(parent_authorperm)
 
-        app = None
-
         if posts is not None and len(posts) > 0:
-            if posts[0]["decline_payout"] is not None:
-                decline_payout = posts[0]["decline_payout"]
-
-            if posts[0]["app"]:
-                app = posts[0]["app"]
-
             if "title" in ops:
                 title = ops["title"]
             else:

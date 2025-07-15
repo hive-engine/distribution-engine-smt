@@ -55,7 +55,6 @@ def process_op(ops):
         db
 
     current_op_block_num = ops["block_num"]
-    current_op_timestamp = ops["timestamp"]
 
     if current_op_block_num - current_block_num > 1:
         print(

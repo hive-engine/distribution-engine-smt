@@ -84,11 +84,15 @@ def state():
         hived_last_ts = hived_conf["last_streamed_timestamp"]
         if hived_last_ts.tzinfo is None:
             hived_last_ts = hived_last_ts.replace(tzinfo=timezone.utc)
-        time_delay_seconds = (datetime.now(timezone.utc) - hived_last_ts).total_seconds()
+        time_delay_seconds = (
+            datetime.now(timezone.utc) - hived_last_ts
+        ).total_seconds()
         engine_last_ts = engine_conf["last_engine_streamed_timestamp"]
         if engine_last_ts.tzinfo is None:
             engine_last_ts = engine_last_ts.replace(tzinfo=timezone.utc)
-        engine_time_delay_seconds = (datetime.now(timezone.utc) - engine_last_ts).total_seconds()
+        engine_time_delay_seconds = (
+            datetime.now(timezone.utc) - engine_last_ts
+        ).total_seconds()
         data = {
             "last_streamed_block": hived_conf["last_streamed_block"],
             "last_streamed_timestamp": formatTimeString(
@@ -316,8 +320,6 @@ def get_staked_accounts():
     Get Staked Accounts via engine API
     """
     token = request.args.get("token".upper(), None)
-    hive = request.args.get("hive", False)
-    minAmount = request.args.get("minAmount", 1)
 
     tokenApi = Token(symbol=token, api=engine_api)
     res = []
@@ -501,7 +503,6 @@ def get_feed():
     try:
         postTrx = PostsTrx(db)
         reblogsDb = ReblogsDB(db)
-        followsDb = FollowsDB(db)
 
         refresh_follows(db, account)
 

@@ -19,7 +19,6 @@ class ReblogProcessor(CustomJsonProcessor):
 
     def process(self, ops, json_data):
         """Main process method."""
-        token_config = self.token_metadata["config"]
         timestamp = ops["timestamp"].replace(tzinfo=None)
 
         user = extract_user(ops, json_data)

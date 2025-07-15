@@ -25,7 +25,6 @@ class PromotePostProcessor(CustomJsonProcessor):
 
     def process(self, op, contractPayload):
         """Main process method."""
-        token_config = self.token_metadata["config"]
         print(json.dumps(contractPayload))
 
         if not check_engine_op(op):

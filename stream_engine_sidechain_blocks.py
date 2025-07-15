@@ -150,8 +150,6 @@ if __name__ == "__main__":
                             logger.error(f"Error processing contract action: {e}")
                             traceback.print_exc()
 
-                last_engine_streamed_block = block_dict["blockNumber"]
-                last_engine_streamed_timestamp = timestamp
                 confStorage.upsert_engine(
                     {
                         "last_engine_streamed_block": block_dict["blockNumber"],

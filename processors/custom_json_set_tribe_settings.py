@@ -20,7 +20,6 @@ class SetTribeSettingsProcessor(CustomJsonProcessor):
         token_config = self.token_metadata["config"]
         token_objects = self.token_metadata["objects"]
         token_config_by_id = self.token_metadata["config_by_id"]
-        timestamp = ops["timestamp"].replace(tzinfo=None)
 
         user = extract_user(ops, json_data)
         if user is None:
