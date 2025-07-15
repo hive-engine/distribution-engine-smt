@@ -24,7 +24,7 @@ def extract_json_data(ops):
         json_data = json.loads(ops["json"])
         if isinstance(json_data, str):
             json_data = json.loads(json_data)
-    except:
+    except Exception:
         traceback.print_exc()
         print("Skip json: %s" % str(ops["json"]))
     return json_data

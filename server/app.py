@@ -80,12 +80,15 @@ def state():
     try:
         hived_conf = confStorage.get()
         engine_conf = confStorage.get_engine()
-        time_delay_seconds = (
-            datetime.now(timezone.utc) - hived_conf["last_streamed_timestamp"]
-        ).total_seconds()
-        engine_time_delay_seconds = (
-            datetime.now(timezone.utc) - engine_conf["last_engine_streamed_timestamp"]
-        ).total_seconds()
+        # Ensure stored timestamp is timezone-aware (assume UTC if naive)
+        hived_last_ts = hived_conf["last_streamed_timestamp"]
+        if hived_last_ts.tzinfo is None:
+            hived_last_ts = hived_last_ts.replace(tzinfo=timezone.utc)
+        time_delay_seconds = (datetime.now(timezone.utc) - hived_last_ts).total_seconds()
+        engine_last_ts = engine_conf["last_engine_streamed_timestamp"]
+        if engine_last_ts.tzinfo is None:
+            engine_last_ts = engine_last_ts.replace(tzinfo=timezone.utc)
+        engine_time_delay_seconds = (datetime.now(timezone.utc) - engine_last_ts).total_seconds()
         data = {
             "last_streamed_block": hived_conf["last_streamed_block"],
             "last_streamed_timestamp": formatTimeString(
@@ -534,7 +537,7 @@ def get_feed():
 def get_discussions_by_created():
     token = request.args.get("token".upper(), None)
     limit = request.args.get("limit", 20)
-    tag = request.args.get("tag", None)
+    tag = request.args.get("tag".lower(), None)
     start_author = request.args.get("start_author".lower(), None)
     start_permlink = request.args.get("start_permlink".lower(), None)
     fetch_votes = not request.args.get("no_votes", False)
@@ -574,7 +577,7 @@ def get_discussions_by_created():
 def get_discussions_by_score(request, score_key, main_post=True):
     token = request.args.get("token".upper(), None)
     limit = request.args.get("limit", 20)
-    tag = request.args.get("tag", None)
+    tag = request.args.get("tag".lower(), None)
     start_author = request.args.get("start_author".lower(), None)
     start_permlink = request.args.get("start_permlink".lower(), None)
     fetch_votes = not request.args.get("no_votes", False)

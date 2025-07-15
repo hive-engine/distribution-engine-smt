@@ -44,7 +44,7 @@ class PromotePostProcessor(CustomJsonProcessor):
         else:
             try:
                 quantity = float(contractPayload["quantity"])
-            except:
+            except Exception:
                 print("%s is not a valid amount" % contractPayload["quantity"])
                 return
 
