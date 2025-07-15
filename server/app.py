@@ -371,20 +371,22 @@ def format_feed_data(
         post["created"] = formatTimeString(post["created"])
         post["last_payout"] = formatTimeString(post["last_payout"])
         post["vote_rshares"] = Decimal(post["vote_rshares"])
-        if fetch_votes:
-            if not fetch_votes:
-                vote_list = votesTrx.get_token_vote(post["authorperm"], token)
-            else:
-                voter_vote = votesTrx.get(post["authorperm"], fetch_votes, token)
-                vote_list = [voter_vote] if voter_vote else []
-
-            for vote in vote_list:
-                vote["timestamp"] = formatTimeString(vote["timestamp"])
-                vote.pop("authorperm", None)
-                if vote["timestamp"] > post["cashout_time"]:
-                    continue
-        else:
+        if fetch_votes is True:
+            # Fetch all votes for the post
+            vote_list = votesTrx.get_token_vote(post["authorperm"], token)
+        elif fetch_votes in (False, None):
+            # Do not fetch any votes
             vote_list = []
+        else:
+            # `fetch_votes` is assumed to be a voter name (string)
+            voter_vote = votesTrx.get(post["authorperm"], fetch_votes, token)
+            vote_list = [voter_vote] if voter_vote else []
+
+        for vote in vote_list:
+            vote["timestamp"] = formatTimeString(vote["timestamp"])
+            vote.pop("authorperm", None)
+            if vote["timestamp"] > post["cashout_time"]:
+                continue
         post["active_votes"] = vote_list
 
         if "reblogged_by" in post and isinstance(post["reblogged_by"], str):

@@ -2,9 +2,7 @@
 
 import logging
 from builtins import object
-from datetime import datetime
-
-from dateutil.relativedelta import relativedelta
+from datetime import datetime, timezone, timedelta
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -171,8 +169,8 @@ class PostsTrx(object):
         self, token, tag=None, limit=100, last_timestamp=None, hive_select=None
     ):
         cutoff = (
-            last_timestamp if last_timestamp else datetime.utcnow()
-        ) + relativedelta(months=-1)
+            last_timestamp if last_timestamp else datetime.now(timezone.utc)
+        ) + timedelta(days=-30)
         tag_clause = ""
         last_timestamp_clause = ""
         hive_select_clause = ""
@@ -211,8 +209,8 @@ class PostsTrx(object):
         hive_select=None,
     ):
         cutoff = (
-            last_timestamp if last_timestamp else datetime.utcnow()
-        ) + relativedelta(months=-1)
+            last_timestamp if last_timestamp else datetime.now(timezone.utc)
+        ) + timedelta(days=-30)
         # cutoff_clause = "AND p.created > :cutoff"
         cutoff_clause = ""
         timestamp_clause = ""
@@ -250,8 +248,8 @@ class PostsTrx(object):
         self, token, accounts, last_timestamp=None, limit=100, hive_select=None
     ):
         cutoff = (
-            last_timestamp if last_timestamp else datetime.utcnow()
-        ) + relativedelta(months=-1)
+            last_timestamp if last_timestamp else datetime.now(timezone.utc)
+        ) + timedelta(days=-30)
         timestamp_clause = ""
         hive_select_clause = ""
         if last_timestamp is not None:
@@ -278,8 +276,8 @@ class PostsTrx(object):
         self, token, accounts, last_timestamp=None, limit=100, hive_select=None
     ):
         cutoff = (
-            last_timestamp if last_timestamp else datetime.utcnow()
-        ) + relativedelta(months=-1)
+            last_timestamp if last_timestamp else datetime.now(timezone.utc)
+        ) + timedelta(days=-30)
         timestamp_clause = ""
         hive_select_clause = ""
         if last_timestamp is not None:
@@ -320,8 +318,8 @@ class PostsTrx(object):
         hive_select=None,
     ):
         cutoff = (
-            last_timestamp if last_timestamp else datetime.utcnow()
-        ) + relativedelta(months=-1)
+            last_timestamp if last_timestamp else datetime.now(timezone.utc)
+        ) + timedelta(days=-30)
         timestamp_clause = ""
         noreblog_timestamp_clause = ""
         hive_select_clause = ""
@@ -369,7 +367,7 @@ class PostsTrx(object):
         main_post=True,
         hive_select=None,
     ):
-        last_month = datetime.now() + relativedelta(months=-1)
+        last_month = datetime.now(timezone.utc) + timedelta(days=-30)
         tag_clause = ""
         last_score_clause = ""
         hive_select_clause = ""
@@ -398,7 +396,7 @@ class PostsTrx(object):
             last_hive_authorperm=f"h{last_authorperm}",
             limit=limit,
             main_post=main_post,
-            current_time=datetime.utcnow(),
+            current_time=datetime.now(timezone.utc),
             cutoff=last_month,
         )
 
@@ -419,7 +417,7 @@ class PostsTrx(object):
         del_posts = []
         for post in table.find(order_by="created"):
             if (
-                datetime.utcnow() - post["created"]
+                datetime.now(timezone.utc) - post["created"]
             ).total_seconds() > 60 * 60 * 24 * days:
                 del_posts.append(post["authorperm"])
         for post in del_posts:
