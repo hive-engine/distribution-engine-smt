@@ -3,7 +3,6 @@
 import json
 import logging
 import logging.config
-import os
 import time
 import traceback
 
@@ -25,13 +24,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
 
-# Flag to enable bulk sidechain block fetching (up to 1000 at a time)
-ENABLE_BULK_BLOCKS = os.getenv("ENGINE_BULK_BLOCKS", "false").lower() in {
-    "1",
-    "true",
-    "yes",
-}
-
 if __name__ == "__main__":
     setup_logging("logger.json")
 
@@ -40,6 +32,9 @@ if __name__ == "__main__":
     databaseConnector = config_data["databaseConnector"]
     engine_api = Api(url=config_data["engine_api"])
     engine_id = config_data["engine_id"]
+
+    # Read configuration flag for bulk block fetching (defaults to False if not present)
+    ENABLE_BULK_BLOCKS = bool(config_data.get("enable_bulk_blocks", False))
 
     start_prep_time = time.time()
 

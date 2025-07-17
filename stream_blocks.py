@@ -1,19 +1,15 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+from datetime import datetime, timezone
 import logging
 import logging.config
-import os
 import time
-from datetime import datetime, timezone
 
 import dataset
-from dotenv import load_dotenv
 from nectar import Hive
 from nectar.block import Blocks
 from nectar.blockchain import Blockchain
-from nectar.utils import (
-    construct_authorperm,
-)
+from nectar.utils import construct_authorperm
 from nectarengine.api import Api
 
 from engine.config_storage import ConfigurationDB
@@ -31,14 +27,6 @@ from processors.custom_json_set_tribe_settings import SetTribeSettingsProcessor
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
-
-# Load environment variables and set batch mode flag
-load_dotenv()
-ENABLE_BULK_BLOCKS = os.getenv("ENGINE_BULK_BLOCKS", "false").lower() in {
-    "1",
-    "true",
-    "yes",
-}
 
 
 def process_op(ops):
@@ -174,6 +162,9 @@ if __name__ == "__main__":
     databaseConnector = config_data["databaseConnector"]
     engine_api = Api(url=config_data["engine_api"])
     engine_id = config_data["engine_id"]
+
+    # Read configuration flag for bulk block processing (defaults to False if not present)
+    ENABLE_BULK_BLOCKS = bool(config_data.get("enable_bulk_blocks", False))
 
     start_prep_time = time.time()
 
