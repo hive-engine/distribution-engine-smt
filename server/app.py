@@ -100,6 +100,10 @@ def state():
             ),
             "time_delay_seconds": time_delay_seconds,
             "engine_time_delay_seconds": engine_time_delay_seconds,
+            "engine_last_streamed_timestamp": formatTimeString(
+                engine_conf["last_engine_streamed_timestamp"]
+            ),
+            "engine_last_streamed_block": engine_conf["last_engine_streamed_block"],
         }
         return jsonify(data)
     finally:
