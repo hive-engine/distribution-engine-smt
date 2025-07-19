@@ -1,9 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-from datetime import datetime, timezone
 import logging
 import logging.config
 import time
+from datetime import datetime, timezone
 
 import dataset
 from nectar import Hive
@@ -40,7 +40,15 @@ def process_op(ops):
         stop_block, \
         token_config, \
         confStorage, \
-        db
+        db, \
+        last_engine_streamed_timestamp
+
+    # Refresh engine timestamp so we wait on current engine progress
+    engine_conf = confStorage.get_engine()
+    if engine_conf and engine_conf.get("last_engine_streamed_timestamp"):
+        last_engine_streamed_timestamp = engine_conf[
+            "last_engine_streamed_timestamp"
+        ].replace(tzinfo=timezone.utc)
 
     current_op_block_num = ops["block_num"]
 
