@@ -34,7 +34,7 @@ if __name__ == "__main__":
     engine_id = config_data["engine_id"]
 
     # Read configuration flag for bulk block fetching (defaults to False if not present)
-    ENABLE_BULK_BLOCKS = bool(config_data.get("enable_bulk_blocks", False))
+    ENABLE_BULK_BLOCKS = bool(config_data.get("enable_engine_bulk_blocks", False))
 
     start_prep_time = time.time()
 

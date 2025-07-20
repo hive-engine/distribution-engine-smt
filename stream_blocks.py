@@ -172,7 +172,7 @@ if __name__ == "__main__":
     engine_id = config_data["engine_id"]
 
     # Read configuration flag for bulk block processing (defaults to False if not present)
-    ENABLE_BULK_BLOCKS = bool(config_data.get("enable_bulk_blocks", False))
+    ENABLE_BULK_BLOCKS = bool(config_data.get("enable_hive_bulk_blocks", False))
 
     start_prep_time = time.time()
 
@@ -250,6 +250,7 @@ if __name__ == "__main__":
                 print(f"Processing blocks {start_block} - {stop_block}")
                 current_batch_start = start_block
 
+                processing_should_continue = True
                 while current_batch_start <= stop_block:
                     current_batch_end = min(
                         current_batch_start + BATCH_SIZE - 1, stop_block
@@ -278,8 +279,11 @@ if __name__ == "__main__":
                         if not batch_completed:
                             break
                     if not batch_completed:
+                        processing_should_continue = False
                         break
                     current_batch_start = current_batch_end + 1
+                if not processing_should_continue:
+                    break
         else:
             print("Starting stream processing...")
             for ops in b.stream(

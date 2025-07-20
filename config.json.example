@@ -3,5 +3,6 @@
 	"engine_id": "ssc-mainnet-hive",
         "databaseConnector": "postgresql://user:password@localhost/engine",
 	"apiCacheDir": "/tmp/scotcache",
-        "enable_bulk_blocks": false
+        "enable_hive_bulk_blocks": false,
+        "enable_engine_bulk_blocks": false
 }
