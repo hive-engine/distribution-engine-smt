@@ -386,7 +386,6 @@ def format_feed_data(
         post["created"] = ensure_timezone_aware(post["created"])
         post["last_payout"] = ensure_timezone_aware(post["last_payout"])
 
-        post["cashout_time"] = formatTimeString(post["cashout_time"])
         post["created"] = formatTimeString(post["created"])
         post["last_payout"] = formatTimeString(post["last_payout"])
         post["vote_rshares"] = Decimal(post["vote_rshares"])
@@ -407,6 +406,7 @@ def format_feed_data(
             if vote["timestamp"] > post["cashout_time"]:
                 continue
             vote["timestamp"] = formatTimeString(vote["timestamp"])
+        post["cashout_time"] = formatTimeString(post["cashout_time"])
         post["active_votes"] = vote_list
 
         if "reblogged_by" in post and isinstance(post["reblogged_by"], str):
