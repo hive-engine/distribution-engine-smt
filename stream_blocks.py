@@ -29,136 +29,202 @@ logger.setLevel(logging.INFO)
 logging.basicConfig()
 
 
-def process_op(ops):
-    global \
-        current_block_num, \
-        last_streamed_timestamp, \
-        last_streamed_block, \
-        block_processing_time, \
-        last_block_print, \
-        start_block, \
-        stop_block, \
-        token_config, \
-        confStorage, \
-        db, \
-        last_engine_streamed_timestamp
+class HiveStreamProcessor:
+    def __init__(self, db, hived, token_metadata, confStorage, postTrx, reblogsStorage, followsDb):
+        self.db = db
+        self.hived = hived
+        self.token_metadata = token_metadata
+        self.confStorage = confStorage
+        self.postTrx = postTrx
+        self.reblogsStorage = reblogsStorage
+        self.followsDb = followsDb
 
-    # Refresh engine timestamp so we wait on current engine progress
-    engine_conf = confStorage.get_engine()
-    if engine_conf and engine_conf.get("last_engine_streamed_timestamp"):
-        last_engine_streamed_timestamp = engine_conf[
-            "last_engine_streamed_timestamp"
-        ].replace(tzinfo=timezone.utc)
+        # Correctly instantiate Blockchain object
+        self.blockchain = Blockchain(mode="head", max_block_wait_repetition=27, steem_instance=hived)
 
-    current_op_block_num = ops["block_num"]
+        self.comment_processor_for_engine = CommentProcessorForEngine(db, hived, token_metadata)
+        self.reblog_processor = ReblogProcessor(db, token_metadata)
+        self.follow_processor = FollowProcessor(db, token_metadata)
+        self.set_tribe_settings_processor = SetTribeSettingsProcessor(db, token_metadata)
 
-    if current_op_block_num - current_block_num > 1:
-        print(
-            "Skip block last block %d - now %d"
-            % (current_block_num, current_op_block_num)
-        )
-    elif current_op_block_num - current_block_num == 1:
-        print("Current block %d" % current_op_block_num)
+        self.last_streamed_block = 0
+        self.last_streamed_timestamp = None
+        self.last_engine_streamed_timestamp = None
+        self.block_processing_time = time.time()
+        self.last_block_print = 0
 
-    current_block_num = current_op_block_num
+    def process_op(self, ops):
+        engine_conf = self.confStorage.get_engine()
+        if engine_conf and engine_conf.get("last_engine_streamed_timestamp"):
+            self.last_engine_streamed_timestamp = engine_conf["last_engine_streamed_timestamp"].replace(tzinfo=timezone.utc)
 
-    delay_min = (datetime.now(timezone.utc) - ops["timestamp"]).total_seconds() / 60
-    delay_sec = int((datetime.now(timezone.utc) - ops["timestamp"]).total_seconds())
+        current_op_block_num = ops["block_num"]
 
-    if delay_sec < 15:
-        print(f"Blocks too recent {delay_sec} ago, waiting.")
-        confStorage.upsert(
-            {
-                "last_streamed_block": current_op_block_num,
-                "last_streamed_timestamp": ops["timestamp"],
-            }
-        )
-        db.commit()
-        return False
-    if (
-        not last_engine_streamed_timestamp
-        or ops["timestamp"] >= last_engine_streamed_timestamp
-    ):
-        print(
-            f"Waiting for engine refblock to catch up to {last_engine_streamed_timestamp}"
-        )
-        confStorage.upsert(
-            {
-                "last_streamed_block": current_op_block_num,
-                "last_streamed_timestamp": ops["timestamp"],
-            }
-        )
-        db.commit()
-        return False
+        if current_op_block_num - self.last_streamed_block > 1:
+            print(f"Skip block last block {self.last_streamed_block} - now {current_op_block_num}")
+        elif current_op_block_num - self.last_streamed_block == 1:
+            print(f"Current block {current_op_block_num}")
 
-    if delay_min < 1:
-        delay_string = "(+ %d s): " % (delay_sec)
-    else:
-        delay_string = "(+ %.1f min)" % (delay_min)
+        delay_sec = int((datetime.now(timezone.utc) - ops["timestamp"]).total_seconds())
 
-    if current_op_block_num > last_streamed_block:
-        if len(token_config) > 0:
-            print(
-                "%s: Block processing took %.2f s"
-                % (delay_string, time.time() - block_processing_time)
+        if delay_sec < 15:
+            print(f"Blocks too recent {delay_sec} ago, waiting.")
+            self.confStorage.upsert(
+                {
+                    "last_streamed_block": current_op_block_num,
+                    "last_streamed_timestamp": ops["timestamp"],
+                }
             )
-        block_processing_time = time.time()
+            self.db.commit()
+            return False  # Indicate that processing should pause
 
-        confStorage.upsert(
-            {
-                "last_streamed_block": current_op_block_num,
-                "last_streamed_timestamp": ops["timestamp"],
-            }
-        )
+        if not self.last_engine_streamed_timestamp or ops["timestamp"] >= self.last_engine_streamed_timestamp:
+            print(f"Waiting for engine refblock to catch up to {self.last_engine_streamed_timestamp}")
+            self.confStorage.upsert(
+                {
+                    "last_streamed_block": current_op_block_num,
+                    "last_streamed_timestamp": ops["timestamp"],
+                }
+            )
+            self.db.commit()
+            return False  # Indicate that processing should pause
 
-        # this is end of a block. end tx here
-        if start_block < last_streamed_block + 1:
-            db.commit()
-        db.begin()
+        delay_string = f"(+ {delay_sec} s): " if delay_sec < 60 else f"(+ {delay_sec / 60:.1f} min)"
 
-    last_streamed_block = current_op_block_num
-    last_streamed_timestamp = ops["timestamp"]
+        if current_op_block_num > self.last_streamed_block:
+            if len(self.token_metadata["config"]) > 0:
+                print(f"{delay_string}: Block processing took {time.time() - self.block_processing_time:.2f} s")
+            self.block_processing_time = time.time()
 
-    if ops["block_num"] - last_block_print > 20:
-        last_block_print = ops["block_num"]
-        print("%s: %d - %s" % (delay_string, ops["block_num"], str(ops["timestamp"])))
-        print("blocks left %d" % (stop_block - ops["block_num"]))
+            self.confStorage.upsert(
+                {
+                    "last_streamed_block": current_op_block_num,
+                    "last_streamed_timestamp": ops["timestamp"],
+                }
+            )
+            self.db.commit()
+            self.db.begin()
 
-    if ops["type"] == "custom_json":
-        custom_json_start_time = time.time()
-        json_data = extract_json_data(ops)
-        if (
-            json_data
-            and ops["id"] == "follow"
-            and isinstance(json_data, list)
-            and len(json_data) == 2
-            and json_data[0] == "reblog"
-            and isinstance(json_data[1], dict)
-        ):
-            reblog_processor.process(ops, json_data)
-        elif (
-            json_data
-            and ops["id"] == "reblog"
-            and isinstance(json_data, list)
-            and len(json_data) == 2
-            and json_data[0] == "reblog"
-            and isinstance(json_data[1], dict)
-        ):
-            reblog_processor.process(ops, json_data)
-        elif json_data and ops["id"] == "follow":
-            follow_processor.process(ops, json_data)
-            print("follow op took %.2f s" % (time.time() - custom_json_start_time))
-        elif json_data and ops["id"] == "scot_set_tribe_settings":
-            set_tribe_settings_processor.process(ops, json_data)
-    elif ops["type"] == "delete_comment":
-        try:
-            authorperm = construct_authorperm(ops["author"], ops["permlink"])
-            postTrx.delete_posts(authorperm)
-        except Exception:
-            print("Could not process %s" % authorperm)
-    elif ops["type"] == "comment":
-        comment_processor_for_engine.process(ops)
-    return True
+        self.last_streamed_block = current_op_block_num
+        self.last_streamed_timestamp = ops["timestamp"]
+
+        if current_op_block_num - self.last_block_print > 20:
+            self.last_block_print = current_op_block_num
+            print(f"{delay_string}: {current_op_block_num} - {ops['timestamp']}")
+            # Removed 'blocks left' as stop_block is dynamic in continuous streaming
+
+        if ops["type"] == "custom_json":
+            custom_json_start_time = time.time()
+            json_data = extract_json_data(ops)
+            if (
+                json_data
+                and ops["id"] == "follow"
+                and isinstance(json_data, list)
+                and len(json_data) == 2
+                and json_data[0] == "reblog"
+                and isinstance(json_data[1], dict)
+            ):
+                self.reblog_processor.process(ops, json_data)
+            elif (
+                json_data
+                and ops["id"] == "reblog"
+                and isinstance(json_data, list)
+                and len(json_data) == 2
+                and json_data[0] == "reblog"
+                and isinstance(json_data[1], dict)
+            ):
+                self.reblog_processor.process(ops, json_data)
+            elif json_data and ops["id"] == "follow":
+                self.follow_processor.process(ops, json_data)
+                print(f"follow op took {time.time() - custom_json_start_time:.2f} s")
+            elif json_data and ops["id"] == "scot_set_tribe_settings":
+                self.set_tribe_settings_processor.process(ops, json_data)
+        elif ops["type"] == "delete_comment":
+            try:
+                authorperm = construct_authorperm(ops["author"], ops["permlink"])
+                self.postTrx.delete_posts(authorperm)
+            except Exception:
+                print(f"Could not process {authorperm}")
+        elif ops["type"] == "comment":
+            self.comment_processor_for_engine.process(ops)
+        return True
+
+    def run(self):
+        # Use self.blockchain here
+        current_block_num = self.blockchain.get_current_block_num()
+        conf_setup = self.confStorage.get()
+        if conf_setup is None:
+            self.confStorage.upsert({"last_streamed_block": 0, "last_streamed_timestamp": datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)})
+            self.last_streamed_block = current_block_num
+            self.last_streamed_timestamp = datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        else:
+            self.last_streamed_block = conf_setup["last_streamed_block"]
+            self.last_streamed_timestamp = conf_setup["last_streamed_timestamp"].replace(tzinfo=timezone.utc) if conf_setup["last_streamed_timestamp"] else datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+        engine_conf = self.confStorage.get_engine()
+        if engine_conf and engine_conf.get("last_engine_streamed_timestamp"):
+            self.last_engine_streamed_timestamp = engine_conf["last_engine_streamed_timestamp"].replace(tzinfo=timezone.utc)
+
+        start_block = self.last_streamed_block + 1 if self.last_streamed_block != 0 else self.blockchain.get_current_block_num()
+        self.last_block_print = start_block
+
+        print(f"Starting stream from block {start_block}")
+
+        # Changed to a single pass, then exit
+        current_head_block = self.blockchain.get_current_block_num()
+        if start_block > current_head_block:
+            print("Caught up. Exiting...")
+            return # Exit the run method
+
+        if ENABLE_BULK_BLOCKS:
+            print(f"Starting batch processing from {start_block} to {current_head_block}")
+            current_batch_start = start_block
+            while current_batch_start <= current_head_block:
+                current_batch_end = min(current_batch_start + BATCH_SIZE - 1, current_head_block)
+                print(f"Processing batch {current_batch_start} - {current_batch_end}")
+                blocks_generator = Blocks(
+                    starting_block_num=current_batch_start,
+                    end_block=current_batch_end,
+                    only_ops=True,
+                    ops=["comment", "custom_json", "delete_comment"],
+                    blockchain_instance=self.hived,
+                )
+                batch_completed = True
+                for block in blocks_generator:
+                    print(f"Processing block {block.block_num}")
+                    for op in block.operations:
+                        op_dict = op["value"]
+                        op_dict["type"] = op["type"].replace("_operation", "")
+                        op_dict["block_num"] = block.block_num
+                        op_dict["timestamp"] = block["timestamp"].replace(tzinfo=timezone.utc) # Ensure timezone-aware
+                        if not self.process_op(op_dict):
+                            batch_completed = False
+                            break
+                    if not batch_completed:
+                        break
+                if not batch_completed:
+                    return # Exit if process_op returned False
+                current_batch_start = current_batch_end + 1
+        else:
+            print(f"Starting stream processing from {start_block} to {current_head_block}")
+            # Use self.blockchain here
+            for ops in self.blockchain.stream(
+                start=start_block,
+                stop=current_head_block, # Stream up to the current head block
+                opNames=["comment", "custom_json", "delete_comment"],
+                max_batch_size=None, # Use default streaming behavior
+                threading=False,
+                thread_num=1,
+            ):
+                ops["timestamp"] = ops["timestamp"].replace(tzinfo=timezone.utc) # Ensure timezone-aware
+                if not self.process_op(ops):
+                    return # Exit if process_op returned False
+
+        # Final update of last streamed block and timestamp before exiting
+        self.confStorage.upsert({"last_streamed_block": self.last_streamed_block, 
+                                 "last_streamed_timestamp": self.last_streamed_timestamp })
+        self.db.commit()
+        print("Stream processing completed. Exiting.")
 
 
 if __name__ == "__main__":
@@ -171,15 +237,10 @@ if __name__ == "__main__":
     engine_api = Api(url=config_data["engine_api"])
     engine_id = config_data["engine_id"]
 
-    # Read configuration flag for bulk block processing (defaults to False if not present)
     ENABLE_BULK_BLOCKS = bool(config_data.get("enable_hive_bulk_blocks", False))
+    BATCH_SIZE = 1000 # Define BATCH_SIZE here
 
-    start_prep_time = time.time()
-
-    # ensure_schema False, require all indexes be created up front to not waste space
-    # (e.g. vote primary key lookup doesn't need a redundant index)
     db = dataset.connect(databaseConnector, ensure_schema=False)
-    # Create keyStorage
 
     postTrx = PostsTrx(db)
     confStorage = ConfigurationDB(db)
@@ -187,123 +248,12 @@ if __name__ == "__main__":
     reblogsStorage = ReblogsDB(db)
     followsDb = FollowsDB(db)
 
-    max_batch_size = None
-    threading = False
-
     node_list = ["https://api.syncad.com", "https://api.hive.blog"]
     hived = Hive(node=node_list, num_retries=5, call_num_retries=3, timeout=15)
-    print("using node %s" % hived.rpc.url)
-    b = Blockchain(mode="head", max_block_wait_repetition=27, steem_instance=hived)
+    print(f"using node {hived.rpc.url}")
 
-    try:
-        current_block_num = b.get_current_block_num()
-        conf_setup = confStorage.get()
-        if conf_setup is None:
-            confStorage.upsert({"last_streamed_block": 0})
-            last_streamed_block = current_block_num
-            last_streamed_timestamp = None
-        else:
-            last_streamed_block = conf_setup["last_streamed_block"]
-            last_streamed_timestamp = conf_setup["last_streamed_timestamp"]
-        last_engine_streamed_timestamp = None
-        engine_conf = confStorage.get_engine()
-        if engine_conf:
-            last_engine_streamed_timestamp = engine_conf[
-                "last_engine_streamed_timestamp"
-            ].replace(tzinfo=timezone.utc)
-        if last_streamed_block == 0:
-            start_block = current_block_num
-            confStorage.upsert({"last_streamed_block": start_block})
-        else:
-            start_block = last_streamed_block + 1
-        stop_block = current_block_num
-        print("processing blocks %d - %d" % (start_block, stop_block))
-        if start_block >= stop_block:
-            print("Caught up. Waiting for new blocks...")
-            time.sleep(3)
-        last_block_print = start_block
-        token_config = tokenConfigStorage.get_all()
-        token_metadata = initialize_token_metadata(token_config, engine_api)
-        # Processors
-        comment_processor_for_engine = CommentProcessorForEngine(
-            db, hived, token_metadata
-        )
-        reblog_processor = ReblogProcessor(db, token_metadata)
-        follow_processor = FollowProcessor(db, token_metadata)
-        set_tribe_settings_processor = SetTribeSettingsProcessor(db, token_metadata)
-        block_processing_time = time.time()
-        # Batch processing logic controlled by ENV flag
-        BATCH_SIZE = 1000
-        if ENABLE_BULK_BLOCKS and stop_block - start_block > 10:
-            print("Starting batch processing...")
-            while True:
-                # Update current block to check for new blocks
-                current_block_num = b.get_current_block_num()
-                start_block = last_streamed_block + 1
-                stop_block = current_block_num
+    token_config = tokenConfigStorage.get_all()
+    token_metadata = initialize_token_metadata(token_config, engine_api)
 
-                if start_block >= stop_block:
-                    print("Caught up. Waiting for new blocks...")
-                    time.sleep(3)
-                    continue
-
-                print(f"Processing blocks {start_block} - {stop_block}")
-                current_batch_start = start_block
-
-                processing_should_continue = True
-                while current_batch_start <= stop_block:
-                    current_batch_end = min(
-                        current_batch_start + BATCH_SIZE - 1, stop_block
-                    )
-                    print(
-                        f"Processing batch {current_batch_start} - {current_batch_end}"
-                    )
-                    blocks_generator = Blocks(
-                        starting_block_num=current_batch_start,
-                        end_block=current_batch_end,
-                        only_ops=True,
-                        ops=["comment", "custom_json", "delete_comment"],
-                        blockchain_instance=hived,
-                    )
-                    batch_completed = True
-                    for block in blocks_generator:
-                        print(f"Processing block {block.block_num}")
-                        for op in block.operations:
-                            op_dict = op["value"]
-                            op_dict["type"] = op["type"].replace("_operation", "")
-                            op_dict["block_num"] = block.block_num
-                            op_dict["timestamp"] = block["timestamp"]
-                            if not process_op(op_dict):
-                                batch_completed = False
-                                break
-                        if not batch_completed:
-                            break
-                    if not batch_completed:
-                        processing_should_continue = False
-                        break
-                    current_batch_start = current_batch_end + 1
-                if not processing_should_continue:
-                    break
-        else:
-            print("Starting stream processing...")
-            for ops in b.stream(
-                start=start_block,
-                stop=stop_block,
-                opNames=["comment", "custom_json", "delete_comment"],
-                max_batch_size=max_batch_size,
-                threading=threading,
-                thread_num=8,
-            ):
-                if not process_op(ops):
-                    break
-            if stop_block >= start_block:
-                confStorage.upsert(
-                    {
-                        "last_streamed_block": last_streamed_block,
-                        "last_streamed_timestamp": last_streamed_timestamp,
-                    }
-                )
-                db.commit()
-        print("stream posts script run %.2f s" % (time.time() - start_prep_time))
-    except KeyboardInterrupt:
-        print("Exiting...")
+    processor = HiveStreamProcessor(db, hived, token_metadata, confStorage, postTrx, reblogsStorage, followsDb)
+    processor.run()

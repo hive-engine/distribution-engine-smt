@@ -5,6 +5,7 @@ import logging
 import logging.config
 import time
 import traceback
+from datetime import datetime, timezone
 
 import dataset
 from dotenv import load_dotenv
@@ -19,10 +20,150 @@ from processors.engine_promote_post_processor import PromotePostProcessor
 
 load_dotenv()
 
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
+
+
+class EngineStreamProcessor:
+    def __init__(self, db, engine_api, token_metadata, confStorage):
+        self.db = db
+        self.engine_api = engine_api
+        self.token_metadata = token_metadata
+        self.confStorage = confStorage
+
+        self.promote_post_processor = PromotePostProcessor(db, token_metadata)
+        self.comments_processor = CommentsContractProcessor(db, engine_api, token_metadata)
+
+        self.last_engine_streamed_block = 0
+        self.last_engine_streamed_timestamp = None
+        self.last_block_print = 0
+
+    def process_engine_block(self, block_dict):
+        timestamp = parse_time(block_dict["timestamp"]).replace(tzinfo=timezone.utc)
+
+        self.db.begin()
+        if not block_dict["transactions"]:
+            print("No transactions in block.")
+        else:
+            for op in block_dict["transactions"]:
+                contract_action = op["action"]
+                contractPayload = op["payload"]
+                try:
+                    contractPayload = json.loads(contractPayload)
+
+                    if op["contract"] == "comments":
+                        self.comments_processor.process(op, contractPayload, timestamp)
+                        continue
+                    elif (
+                        op["contract"] == "tokens"
+                        and contract_action == "transfer"
+                    ):
+                        if (
+                            "memo" not in contractPayload
+                            or contractPayload["memo"] is None
+                        ):
+                            print("No memo field in contractPayload")
+                            continue
+                        memo = contractPayload["memo"]
+                        if not isinstance(memo, str) or len(memo) < 3:
+                            continue
+                        if "symbol" not in contractPayload:
+                            continue
+                        transfer_token = contractPayload["symbol"]
+                        if "to" not in contractPayload:
+                            continue
+                        if not isinstance(transfer_token, str):
+                            continue
+                        if transfer_token not in self.token_metadata["config"]:
+                            continue
+                        transfer_token_config = self.token_metadata["config"][
+                            transfer_token
+                        ]
+                        if (
+                            transfer_token_config is not None
+                            and memo.find("@") > -1
+                        ):
+                            if (
+                                contractPayload["to"]
+                                == transfer_token_config[
+                                    "promoted_post_account"
+                                ]
+                            ):
+                                self.promote_post_processor.process(
+                                    op, contractPayload
+                                )
+                except Exception as e:
+                    logger.error(f"Error processing contract action: {e}")
+                    traceback.print_exc()
+
+        self.confStorage.upsert_engine(
+            {
+                "last_engine_streamed_block": block_dict["blockNumber"],
+                "last_engine_streamed_timestamp": timestamp,
+            }
+        )
+        self.db.commit()
+
+    def run(self):
+        conf_setup = self.confStorage.get_engine()
+        if conf_setup is None:
+            self.confStorage.upsert_engine({"last_engine_streamed_block": 0, "last_engine_streamed_timestamp": datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)})
+            self.last_engine_streamed_block = 0
+            self.last_engine_streamed_timestamp = datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        else:
+            self.last_engine_streamed_block = conf_setup["last_engine_streamed_block"]
+            self.last_engine_streamed_timestamp = conf_setup["last_engine_streamed_timestamp"].replace(tzinfo=timezone.utc) if conf_setup["last_engine_streamed_timestamp"] else datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+        print("stream new engine blocks")
+
+        while True:
+            try:
+                current_block_info = self.engine_api.get_latest_block_info()
+                current_block_num = current_block_info["blockNumber"]
+
+                start_block = self.last_engine_streamed_block + 1
+                stop_block = current_block_num + 1
+
+                if start_block >= stop_block:
+                    print("Caught up. Waiting for new blocks...")
+                    time.sleep(3)
+                    self.last_engine_streamed_block = current_block_num
+                    continue
+
+                print(f"Processing blocks {start_block} - {stop_block}")
+
+                if ENABLE_BULK_BLOCKS:
+                    print("Bulk block fetching ENABLED. Fetching sidechain blocks in chunks of 1000 …")
+                    CHUNK_SIZE = 1000
+                    current = start_block
+                    while current < stop_block:
+                        count = min(CHUNK_SIZE, stop_block - current)
+                        try:
+                            block_range = self.engine_api.get_block_range_info(current, count)
+                        except Exception:
+                            traceback.print_exc()
+                            block_range = []
+                        for block_dict in block_range:
+                            print(f"Processing engine block {block_dict['blockNumber']}")
+                            self.process_engine_block(block_dict)
+                            self.last_engine_streamed_block = block_dict["blockNumber"]
+                        current += count
+                else:
+                    for current_block_num_iter in range(start_block, stop_block):
+                        current_block = self.engine_api.get_block_info(current_block_num_iter)
+                        print(f"Processing engine block {current_block_num_iter}")
+                        self.process_engine_block(current_block)
+                        self.last_engine_streamed_block = current_block_num_iter
+
+            except KeyboardInterrupt:
+                print("Exiting...")
+                break
+            except Exception as e:
+                logger.error(f"An error occurred in the main loop: {e}")
+                traceback.print_exc()
+                time.sleep(5)
+
 
 if __name__ == "__main__":
     setup_logging("logger.json")
@@ -33,13 +174,8 @@ if __name__ == "__main__":
     engine_api = Api(url=config_data["engine_api"])
     engine_id = config_data["engine_id"]
 
-    # Read configuration flag for bulk block fetching (defaults to False if not present)
     ENABLE_BULK_BLOCKS = bool(config_data.get("enable_engine_bulk_blocks", False))
 
-    start_prep_time = time.time()
-
-    # ensure_schema False, require all indexes be created up front to not waste space
-    # (e.g. vote primary key lookup doesn't need a redundant index)
     db = dataset.connect(databaseConnector, ensure_schema=False)
 
     confStorage = ConfigurationDB(db)
@@ -48,145 +184,5 @@ if __name__ == "__main__":
     token_config = tokenConfigStorage.get_all()
     token_metadata = initialize_token_metadata(token_config, engine_api)
 
-    conf_setup = confStorage.get_engine()
-    if conf_setup is None:
-        confStorage.upsert_engine({"last_engine_streamed_block": 0})
-        last_engine_streamed_block = 0
-        last_engine_streamed_timestamp = 0
-    else:
-        last_engine_streamed_block = conf_setup["last_engine_streamed_block"]
-        last_engine_streamed_timestamp = conf_setup["last_engine_streamed_timestamp"]
-
-    print("stream new engine blocks")
-
-    while True:
-        try:
-            current_block = engine_api.get_latest_block_info()
-            current_block_num = current_block["blockNumber"]
-
-            if last_engine_streamed_block == 0:
-                start_block = current_block_num
-                confStorage.upsert_engine({"last_engine_streamed_block": start_block})
-            else:
-                start_block = last_engine_streamed_block + 1
-
-            stop_block = current_block_num + 1
-
-            print("start_block %d - %d" % (start_block, stop_block))
-
-            last_block_print = start_block
-
-            last_engine_streamed_timestamp = None
-
-            # Processors
-            promote_post_processor = PromotePostProcessor(db, token_metadata)
-            comments_processor = CommentsContractProcessor(
-                db, engine_api, token_metadata
-            )
-
-            def process_engine_block(block_dict):
-                """Process a single sidechain block returned by the engine API."""
-                timestamp = parse_time(block_dict["timestamp"]).replace(tzinfo=None)
-
-                db.begin()
-                if not block_dict["transactions"]:
-                    print("No transactions in block.")
-                else:
-                    for op in block_dict["transactions"]:
-                        contract_action = op["action"]
-                        contractPayload = op["payload"]
-                        try:
-                            contractPayload = json.loads(contractPayload)
-
-                            if op["contract"] == "comments":
-                                comments_processor.process(
-                                    op, contractPayload, timestamp
-                                )
-                                continue
-                            elif (
-                                op["contract"] == "tokens"
-                                and contract_action == "transfer"
-                            ):
-                                if (
-                                    "memo" not in contractPayload
-                                    or contractPayload["memo"] is None
-                                ):
-                                    print("No memo field in contractPayload")
-                                    continue
-                                memo = contractPayload["memo"]
-                                if not isinstance(memo, str) or len(memo) < 3:
-                                    continue
-                                if "symbol" not in contractPayload:
-                                    continue
-                                transfer_token = contractPayload["symbol"]
-                                if "to" not in contractPayload:
-                                    continue
-                                if not isinstance(transfer_token, str):
-                                    continue
-                                if transfer_token not in token_metadata["config"]:
-                                    continue
-                                transfer_token_config = token_metadata["config"][
-                                    transfer_token
-                                ]
-                                if (
-                                    transfer_token_config is not None
-                                    and memo.find("@") > -1
-                                ):
-                                    if (
-                                        contractPayload["to"]
-                                        == transfer_token_config[
-                                            "promoted_post_account"
-                                        ]
-                                    ):
-                                        promote_post_processor.process(
-                                            op, contractPayload
-                                        )
-                        except Exception as e:
-                            logger.error(f"Error processing contract action: {e}")
-                            traceback.print_exc()
-
-                confStorage.upsert_engine(
-                    {
-                        "last_engine_streamed_block": block_dict["blockNumber"],
-                        "last_engine_streamed_timestamp": timestamp,
-                    }
-                )
-                db.commit()
-
-            if start_block >= stop_block:
-                print("Caught up. Waiting for new blocks...")
-                time.sleep(3)
-                continue
-
-            if ENABLE_BULK_BLOCKS:
-                print(
-                    "Bulk block fetching ENABLED. Fetching sidechain blocks in chunks of 1000 …"
-                )
-                CHUNK_SIZE = 1000
-                current = start_block
-                while current < stop_block:
-                    count = min(CHUNK_SIZE, stop_block - current)
-                    try:
-                        block_range = engine_api.get_block_range_info(current, count)
-                    except Exception:
-                        # Fall back to single-block fetch on error
-                        traceback.print_exc()
-                        block_range = []
-                    for block_dict in block_range:
-                        print(f"Processing engine block {block_dict['blockNumber']}")
-                        process_engine_block(block_dict)
-                        last_engine_streamed_block = block_dict["blockNumber"]
-                    current += count
-            else:
-                for current_block_num in range(start_block, stop_block):
-                    current_block = engine_api.get_block_info(current_block_num)
-                    print(f"Processing engine block {current_block_num}")
-                    process_engine_block(current_block)
-                    last_engine_streamed_block = current_block_num
-        except KeyboardInterrupt:
-            print("Exiting...")
-            break
-        except Exception as e:
-            logger.error(f"An error occurred in the main loop: {e}")
-            traceback.print_exc()
-            time.sleep(5)
+    processor = EngineStreamProcessor(db, engine_api, token_metadata, confStorage)
+    processor.run()

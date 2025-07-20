@@ -9,7 +9,7 @@ This document details the significant changes between the `main` and `dev` branc
   - Replaced the unmaintained `beem` library with `hive-nectar` for all Hive RPC interactions.
   - Replaced `steemengine` with `nectarengine` for interacting with the Hive Engine sidechain.
 - **Performance Enhancements:**
-  - **Batch Block Processing:** Introduced batch processing for both mainnet and sidechain blocks, which can be enabled via the `enable_bulk_blocks` setting in `config.json`. This significantly improves initial sync speed.
+  - **Batch Block Processing:** Introduced batch processing for both mainnet and sidechain blocks, which can be enabled via the `enable_hive_bulk_blocks` and `enable_engine_bulk_blocks` settings in `config.json`. This significantly improves initial sync speed.
   - **Improved Streaming Logic:** Refined block streaming with more robust timestamp tracking and error handling.
 - **API Enhancements:**
   - **Enhanced `/state` Endpoint:** The `/state` endpoint now provides more detailed streaming status, including information about the sidechain sync progress.
@@ -25,6 +25,7 @@ This document details the significant changes between the `main` and `dev` branc
   - Replaced `datetime.utcnow()` with timezone-aware `datetime.now(timezone.utc)` for more accurate timestamp handling.
   - Removed the `python-dateutil` dependency in favor of the standard library's `datetime` module.
 - **Standardized Scripts:** All `run-*.sh` scripts have been updated for better compatibility and consistency.
+- **Shell Script Updates:** Reverted shell scripts to use the original `main` branch paths and standardized the Python interpreter to `python3`.
 - **Improved Logging:** Logging has been updated to be more consistent and provide better insights into the application's behavior.
 
 ## 🐛 Bug Fixes
