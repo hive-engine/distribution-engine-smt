@@ -33,7 +33,9 @@ class EngineStreamProcessor:
         self.confStorage = confStorage
 
         self.promote_post_processor = PromotePostProcessor(db, token_metadata)
-        self.comments_processor = CommentsContractProcessor(db, engine_api, token_metadata)
+        self.comments_processor = CommentsContractProcessor(
+            db, engine_api, token_metadata
+        )
 
         self.last_engine_streamed_block = 0
         self.last_engine_streamed_timestamp = None
@@ -55,10 +57,7 @@ class EngineStreamProcessor:
                     if op["contract"] == "comments":
                         self.comments_processor.process(op, contractPayload, timestamp)
                         continue
-                    elif (
-                        op["contract"] == "tokens"
-                        and contract_action == "transfer"
-                    ):
+                    elif op["contract"] == "tokens" and contract_action == "transfer":
                         if (
                             "memo" not in contractPayload
                             or contractPayload["memo"] is None
@@ -80,19 +79,12 @@ class EngineStreamProcessor:
                         transfer_token_config = self.token_metadata["config"][
                             transfer_token
                         ]
-                        if (
-                            transfer_token_config is not None
-                            and memo.find("@") > -1
-                        ):
+                        if transfer_token_config is not None and memo.find("@") > -1:
                             if (
                                 contractPayload["to"]
-                                == transfer_token_config[
-                                    "promoted_post_account"
-                                ]
+                                == transfer_token_config["promoted_post_account"]
                             ):
-                                self.promote_post_processor.process(
-                                    op, contractPayload
-                                )
+                                self.promote_post_processor.process(op, contractPayload)
                 except Exception as e:
                     logger.error(f"Error processing contract action: {e}")
                     traceback.print_exc()
@@ -108,12 +100,27 @@ class EngineStreamProcessor:
     def run(self):
         conf_setup = self.confStorage.get_engine()
         if conf_setup is None:
-            self.confStorage.upsert_engine({"last_engine_streamed_block": 0, "last_engine_streamed_timestamp": datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)})
+            self.confStorage.upsert_engine(
+                {
+                    "last_engine_streamed_block": 0,
+                    "last_engine_streamed_timestamp": datetime(
+                        1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc
+                    ),
+                }
+            )
             self.last_engine_streamed_block = 0
-            self.last_engine_streamed_timestamp = datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            self.last_engine_streamed_timestamp = datetime(
+                1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc
+            )
         else:
             self.last_engine_streamed_block = conf_setup["last_engine_streamed_block"]
-            self.last_engine_streamed_timestamp = conf_setup["last_engine_streamed_timestamp"].replace(tzinfo=timezone.utc) if conf_setup["last_engine_streamed_timestamp"] else datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            self.last_engine_streamed_timestamp = (
+                conf_setup["last_engine_streamed_timestamp"].replace(
+                    tzinfo=timezone.utc
+                )
+                if conf_setup["last_engine_streamed_timestamp"]
+                else datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            )
 
         print("stream new engine blocks")
 
@@ -134,24 +141,32 @@ class EngineStreamProcessor:
                 print(f"Processing blocks {start_block} - {stop_block}")
 
                 if ENABLE_BULK_BLOCKS:
-                    print("Bulk block fetching ENABLED. Fetching sidechain blocks in chunks of 1000 …")
+                    print(
+                        "Bulk block fetching ENABLED. Fetching sidechain blocks in chunks of 1000 …"
+                    )
                     CHUNK_SIZE = 1000
                     current = start_block
                     while current < stop_block:
                         count = min(CHUNK_SIZE, stop_block - current)
                         try:
-                            block_range = self.engine_api.get_block_range_info(current, count)
+                            block_range = self.engine_api.get_block_range_info(
+                                current, count
+                            )
                         except Exception:
                             traceback.print_exc()
                             block_range = []
                         for block_dict in block_range:
-                            print(f"Processing engine block {block_dict['blockNumber']}")
+                            print(
+                                f"Processing engine block {block_dict['blockNumber']}"
+                            )
                             self.process_engine_block(block_dict)
                             self.last_engine_streamed_block = block_dict["blockNumber"]
                         current += count
                 else:
                     for current_block_num_iter in range(start_block, stop_block):
-                        current_block = self.engine_api.get_block_info(current_block_num_iter)
+                        current_block = self.engine_api.get_block_info(
+                            current_block_num_iter
+                        )
                         print(f"Processing engine block {current_block_num_iter}")
                         self.process_engine_block(current_block)
                         self.last_engine_streamed_block = current_block_num_iter

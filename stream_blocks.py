@@ -30,7 +30,9 @@ logging.basicConfig()
 
 
 class HiveStreamProcessor:
-    def __init__(self, db, hived, token_metadata, confStorage, postTrx, reblogsStorage, followsDb):
+    def __init__(
+        self, db, hived, token_metadata, confStorage, postTrx, reblogsStorage, followsDb
+    ):
         self.db = db
         self.hived = hived
         self.token_metadata = token_metadata
@@ -40,12 +42,18 @@ class HiveStreamProcessor:
         self.followsDb = followsDb
 
         # Correctly instantiate Blockchain object
-        self.blockchain = Blockchain(mode="head", max_block_wait_repetition=27, steem_instance=hived)
+        self.blockchain = Blockchain(
+            mode="head", max_block_wait_repetition=27, steem_instance=hived
+        )
 
-        self.comment_processor_for_engine = CommentProcessorForEngine(db, hived, token_metadata)
+        self.comment_processor_for_engine = CommentProcessorForEngine(
+            db, hived, token_metadata
+        )
         self.reblog_processor = ReblogProcessor(db, token_metadata)
         self.follow_processor = FollowProcessor(db, token_metadata)
-        self.set_tribe_settings_processor = SetTribeSettingsProcessor(db, token_metadata)
+        self.set_tribe_settings_processor = SetTribeSettingsProcessor(
+            db, token_metadata
+        )
 
         self.last_streamed_block = 0
         self.last_streamed_timestamp = None
@@ -56,12 +64,16 @@ class HiveStreamProcessor:
     def process_op(self, ops):
         engine_conf = self.confStorage.get_engine()
         if engine_conf and engine_conf.get("last_engine_streamed_timestamp"):
-            self.last_engine_streamed_timestamp = engine_conf["last_engine_streamed_timestamp"].replace(tzinfo=timezone.utc)
+            self.last_engine_streamed_timestamp = engine_conf[
+                "last_engine_streamed_timestamp"
+            ].replace(tzinfo=timezone.utc)
 
         current_op_block_num = ops["block_num"]
 
         if current_op_block_num - self.last_streamed_block > 1:
-            print(f"Skip block last block {self.last_streamed_block} - now {current_op_block_num}")
+            print(
+                f"Skip block last block {self.last_streamed_block} - now {current_op_block_num}"
+            )
         elif current_op_block_num - self.last_streamed_block == 1:
             print(f"Current block {current_op_block_num}")
 
@@ -78,8 +90,13 @@ class HiveStreamProcessor:
             self.db.commit()
             return False  # Indicate that processing should pause
 
-        if not self.last_engine_streamed_timestamp or ops["timestamp"] >= self.last_engine_streamed_timestamp:
-            print(f"Waiting for engine refblock to catch up to {self.last_engine_streamed_timestamp}")
+        if (
+            not self.last_engine_streamed_timestamp
+            or ops["timestamp"] >= self.last_engine_streamed_timestamp
+        ):
+            print(
+                f"Waiting for engine refblock to catch up to {self.last_engine_streamed_timestamp}"
+            )
             self.confStorage.upsert(
                 {
                     "last_streamed_block": current_op_block_num,
@@ -89,11 +106,17 @@ class HiveStreamProcessor:
             self.db.commit()
             return False  # Indicate that processing should pause
 
-        delay_string = f"(+ {delay_sec} s): " if delay_sec < 60 else f"(+ {delay_sec / 60:.1f} min)"
+        delay_string = (
+            f"(+ {delay_sec} s): "
+            if delay_sec < 60
+            else f"(+ {delay_sec / 60:.1f} min)"
+        )
 
         if current_op_block_num > self.last_streamed_block:
             if len(self.token_metadata["config"]) > 0:
-                print(f"{delay_string}: Block processing took {time.time() - self.block_processing_time:.2f} s")
+                print(
+                    f"{delay_string}: Block processing took {time.time() - self.block_processing_time:.2f} s"
+                )
             self.block_processing_time = time.time()
 
             self.confStorage.upsert(
@@ -154,18 +177,37 @@ class HiveStreamProcessor:
         current_block_num = self.blockchain.get_current_block_num()
         conf_setup = self.confStorage.get()
         if conf_setup is None:
-            self.confStorage.upsert({"last_streamed_block": 0, "last_streamed_timestamp": datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)})
+            self.confStorage.upsert(
+                {
+                    "last_streamed_block": 0,
+                    "last_streamed_timestamp": datetime(
+                        1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc
+                    ),
+                }
+            )
             self.last_streamed_block = current_block_num
-            self.last_streamed_timestamp = datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            self.last_streamed_timestamp = datetime(
+                1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc
+            )
         else:
             self.last_streamed_block = conf_setup["last_streamed_block"]
-            self.last_streamed_timestamp = conf_setup["last_streamed_timestamp"].replace(tzinfo=timezone.utc) if conf_setup["last_streamed_timestamp"] else datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            self.last_streamed_timestamp = (
+                conf_setup["last_streamed_timestamp"].replace(tzinfo=timezone.utc)
+                if conf_setup["last_streamed_timestamp"]
+                else datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            )
 
         engine_conf = self.confStorage.get_engine()
         if engine_conf and engine_conf.get("last_engine_streamed_timestamp"):
-            self.last_engine_streamed_timestamp = engine_conf["last_engine_streamed_timestamp"].replace(tzinfo=timezone.utc)
+            self.last_engine_streamed_timestamp = engine_conf[
+                "last_engine_streamed_timestamp"
+            ].replace(tzinfo=timezone.utc)
 
-        start_block = self.last_streamed_block + 1 if self.last_streamed_block != 0 else self.blockchain.get_current_block_num()
+        start_block = (
+            self.last_streamed_block + 1
+            if self.last_streamed_block != 0
+            else self.blockchain.get_current_block_num()
+        )
         self.last_block_print = start_block
 
         print(f"Starting stream from block {start_block}")
@@ -174,13 +216,17 @@ class HiveStreamProcessor:
         current_head_block = self.blockchain.get_current_block_num()
         if start_block > current_head_block:
             print("Caught up. Exiting...")
-            return # Exit the run method
+            return  # Exit the run method
 
         if ENABLE_BULK_BLOCKS:
-            print(f"Starting batch processing from {start_block} to {current_head_block}")
+            print(
+                f"Starting batch processing from {start_block} to {current_head_block}"
+            )
             current_batch_start = start_block
             while current_batch_start <= current_head_block:
-                current_batch_end = min(current_batch_start + BATCH_SIZE - 1, current_head_block)
+                current_batch_end = min(
+                    current_batch_start + BATCH_SIZE - 1, current_head_block
+                )
                 print(f"Processing batch {current_batch_start} - {current_batch_end}")
                 blocks_generator = Blocks(
                     starting_block_num=current_batch_start,
@@ -196,33 +242,43 @@ class HiveStreamProcessor:
                         op_dict = op["value"]
                         op_dict["type"] = op["type"].replace("_operation", "")
                         op_dict["block_num"] = block.block_num
-                        op_dict["timestamp"] = block["timestamp"].replace(tzinfo=timezone.utc) # Ensure timezone-aware
+                        op_dict["timestamp"] = block["timestamp"].replace(
+                            tzinfo=timezone.utc
+                        )  # Ensure timezone-aware
                         if not self.process_op(op_dict):
                             batch_completed = False
                             break
                     if not batch_completed:
                         break
                 if not batch_completed:
-                    return # Exit if process_op returned False
+                    return  # Exit if process_op returned False
                 current_batch_start = current_batch_end + 1
         else:
-            print(f"Starting stream processing from {start_block} to {current_head_block}")
+            print(
+                f"Starting stream processing from {start_block} to {current_head_block}"
+            )
             # Use self.blockchain here
             for ops in self.blockchain.stream(
                 start=start_block,
-                stop=current_head_block, # Stream up to the current head block
+                stop=current_head_block,  # Stream up to the current head block
                 opNames=["comment", "custom_json", "delete_comment"],
-                max_batch_size=None, # Use default streaming behavior
+                max_batch_size=None,  # Use default streaming behavior
                 threading=False,
                 thread_num=1,
             ):
-                ops["timestamp"] = ops["timestamp"].replace(tzinfo=timezone.utc) # Ensure timezone-aware
+                ops["timestamp"] = ops["timestamp"].replace(
+                    tzinfo=timezone.utc
+                )  # Ensure timezone-aware
                 if not self.process_op(ops):
-                    return # Exit if process_op returned False
+                    return  # Exit if process_op returned False
 
         # Final update of last streamed block and timestamp before exiting
-        self.confStorage.upsert({"last_streamed_block": self.last_streamed_block, 
-                                 "last_streamed_timestamp": self.last_streamed_timestamp })
+        self.confStorage.upsert(
+            {
+                "last_streamed_block": self.last_streamed_block,
+                "last_streamed_timestamp": self.last_streamed_timestamp,
+            }
+        )
         self.db.commit()
         print("Stream processing completed. Exiting.")
 
@@ -238,7 +294,7 @@ if __name__ == "__main__":
     engine_id = config_data["engine_id"]
 
     ENABLE_BULK_BLOCKS = bool(config_data.get("enable_hive_bulk_blocks", False))
-    BATCH_SIZE = 1000 # Define BATCH_SIZE here
+    BATCH_SIZE = 1000  # Define BATCH_SIZE here
 
     db = dataset.connect(databaseConnector, ensure_schema=False)
 
@@ -255,5 +311,7 @@ if __name__ == "__main__":
     token_config = tokenConfigStorage.get_all()
     token_metadata = initialize_token_metadata(token_config, engine_api)
 
-    processor = HiveStreamProcessor(db, hived, token_metadata, confStorage, postTrx, reblogsStorage, followsDb)
+    processor = HiveStreamProcessor(
+        db, hived, token_metadata, confStorage, postTrx, reblogsStorage, followsDb
+    )
     processor.run()
