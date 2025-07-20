@@ -73,6 +73,12 @@ def main():
     return ""
 
 
+def ensure_timezone_aware(dt):
+    """Adds UTC timezone to a naive datetime object."""
+    if dt and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
 @app.route("/state", methods=["GET"])
 def state():
     db = dataset.connect(databaseConnector, ensure_schema=False)
@@ -80,30 +86,20 @@ def state():
     try:
         hived_conf = confStorage.get()
         engine_conf = confStorage.get_engine()
-        # Ensure stored timestamp is timezone-aware (assume UTC if naive)
-        hived_last_ts = hived_conf["last_streamed_timestamp"]
-        if hived_last_ts.tzinfo is None:
-            hived_last_ts = hived_last_ts.replace(tzinfo=timezone.utc)
-        time_delay_seconds = (
-            datetime.now(timezone.utc) - hived_last_ts
-        ).total_seconds()
-        engine_last_ts = engine_conf["last_engine_streamed_timestamp"]
-        if engine_last_ts.tzinfo is None:
-            engine_last_ts = engine_last_ts.replace(tzinfo=timezone.utc)
-        engine_time_delay_seconds = (
-            datetime.now(timezone.utc) - engine_last_ts
-        ).total_seconds()
+
+        hived_last_ts = ensure_timezone_aware(hived_conf.get("last_streamed_timestamp"))
+        engine_last_ts = ensure_timezone_aware(engine_conf.get("last_engine_streamed_timestamp"))
+
+        time_delay_seconds = (datetime.now(timezone.utc) - hived_last_ts).total_seconds() if hived_last_ts else 0
+        engine_time_delay_seconds = (datetime.now(timezone.utc) - engine_last_ts).total_seconds() if engine_last_ts else 0
+
         data = {
-            "last_streamed_block": hived_conf["last_streamed_block"],
-            "last_streamed_timestamp": formatTimeString(
-                hived_conf["last_streamed_timestamp"]
-            ),
+            "last_streamed_block": hived_conf.get("last_streamed_block"),
+            "last_streamed_timestamp": formatTimeString(hived_last_ts) if hived_last_ts else None,
             "time_delay_seconds": time_delay_seconds,
             "engine_time_delay_seconds": engine_time_delay_seconds,
-            "engine_last_streamed_timestamp": formatTimeString(
-                engine_conf["last_engine_streamed_timestamp"]
-            ),
-            "engine_last_streamed_block": engine_conf["last_engine_streamed_block"],
+            "engine_last_streamed_timestamp": formatTimeString(engine_last_ts) if engine_last_ts else None,
+            "engine_last_streamed_block": engine_conf.get("last_engine_streamed_block"),
         }
         return jsonify(data)
     finally:
@@ -371,6 +367,10 @@ def format_feed_data(
             else:
                 continue
         post["permlink"] = permlink
+        post["cashout_time"] = ensure_timezone_aware(post["cashout_time"])
+        post["created"] = ensure_timezone_aware(post["created"])
+        post["last_payout"] = ensure_timezone_aware(post["last_payout"])
+
         post["cashout_time"] = formatTimeString(post["cashout_time"])
         post["created"] = formatTimeString(post["created"])
         post["last_payout"] = formatTimeString(post["last_payout"])
@@ -387,10 +387,11 @@ def format_feed_data(
             vote_list = [voter_vote] if voter_vote else []
 
         for vote in vote_list:
-            vote["timestamp"] = formatTimeString(vote["timestamp"])
+            vote["timestamp"] = ensure_timezone_aware(vote["timestamp"])
             vote.pop("authorperm", None)
             if vote["timestamp"] > post["cashout_time"]:
                 continue
+            vote["timestamp"] = formatTimeString(vote["timestamp"])
         post["active_votes"] = vote_list
 
         if "reblogged_by" in post and isinstance(post["reblogged_by"], str):
@@ -533,11 +534,12 @@ def get_feed():
 
             post = postTrx.get_token_post(token, authorperm)
             if post is not None:
-                last_timestamp = post["created"]
+                last_timestamp = ensure_timezone_aware(post["created"])
                 if include_reblogs:
                     reblog_time = reblogsDb.get_earliest_authorperm_reblog_timestamp(
                         account, authorperm, use_follows=True
                     )
+                    reblog_time = ensure_timezone_aware(reblog_time)
                     if reblog_time is not None and reblog_time > last_timestamp:
                         last_timestamp = reblog_time
 
@@ -585,7 +587,7 @@ def get_discussions_by_created():
             authorperm = construct_authorperm(start_author, start_permlink)
             post = postTrx.get_token_post(token, authorperm)
             if post is not None:
-                last_timestamp = post["created"]
+                last_timestamp = ensure_timezone_aware(post["created"])
 
         created_posts = postTrx.get_discussions_by_created(
             token, tag=tag, limit=limit, last_timestamp=last_timestamp
@@ -708,13 +710,13 @@ def get_discussions_by_blog():
             if account == start_author:
                 post = postTrx.get_token_post(token, authorperm)
                 if post is not None:
-                    last_timestamp = post["created"]
+                    last_timestamp = ensure_timezone_aware(post["created"])
             else:
                 reblog_time = reblogsDb.get_earliest_authorperm_reblog_timestamp(
                     account, authorperm
                 )
                 if reblog_time is not None:
-                    last_timestamp = reblog_time
+                    last_timestamp = ensure_timezone_aware(reblog_time)
 
         created_posts = postTrx.get_discussions_by_blog(
             token,
@@ -767,7 +769,7 @@ def get_discussions_by_comments():
             authorperm = construct_authorperm(start_author, start_permlink)
             post = postTrx.get_token_post(token, authorperm)
             if post is not None:
-                last_timestamp = post["created"]
+                last_timestamp = ensure_timezone_aware(post["created"])
 
         comment_posts = postTrx.get_discussions_by_comments(
             token, [account], last_timestamp=last_timestamp
@@ -817,7 +819,7 @@ def get_discussions_by_replies():
             authorperm = construct_authorperm(start_author, start_permlink)
             post = postTrx.get_token_post(token, authorperm)
             if post is not None:
-                last_timestamp = post["created"]
+                last_timestamp = ensure_timezone_aware(post["created"])
 
         reply_posts = postTrx.get_discussions_by_replies(
             token, [account], last_timestamp=last_timestamp
@@ -864,6 +866,7 @@ def refresh_follows(db, account):
     followsDb = FollowsDB(db)
     tokenConfigStorage = TokenConfigDB(db)
     followRefreshTime = accountsStorage.get_follow_refresh_time(account)
+    followRefreshTime = ensure_timezone_aware(followRefreshTime)
 
     if followRefreshTime is None:
         try:
@@ -880,7 +883,7 @@ def refresh_follows(db, account):
                 {
                     "name": account,
                     "symbol": all_tokens[0]["token"],
-                    "last_follow_refresh_time": datetime.now(),
+                    "last_follow_refresh_time": datetime.now(timezone.utc),
                 }
             )
 
