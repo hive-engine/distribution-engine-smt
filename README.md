@@ -105,18 +105,3 @@ Run the following with your process manager of choice (e.g. pm2)
 (dev) ./run-api-server.sh
 (prod) ./run-prod-api-server.sh
 ```
-
-## Recent Improvements
-
-The following improvements have been introduced in the `dev` branch compared to `main`:
-
-- Replaced Beem library with Nectar for Hive RPC interactions (Beem is no longer maintained).
-- Bulk block processing control moved from environment variable to configuration file.
-- Engine streaming status fields added to server API responses.
-- Python code modernized: removed python-dateutil dependency, removed Python 2 futures, and refactored to use standard library `datetime`.
-- Vote fetching logic simplified.
-- Case normalization standardized for token, author, and permlink parameters across all API endpoints.
-- Timezone-aware timestamp handling implemented and exception/tag handling standardized.
-- Batch block processing implemented with environment flag control.
-- Block streaming logic improved with timestamp tracking.
-- Modernized codebase with Python 3 syntax enhancements and improved error handling.
