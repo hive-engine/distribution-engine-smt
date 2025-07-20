@@ -7,7 +7,7 @@ Indexing for Hive Engine Comments Smart Contract
 sudo apt-get install postgresql postgresql-contrib python3-pip libicu-dev build-essential libssl-dev python3-dev git
 
 # versioned python packages
-sudo apt-get install python3.8-dev
+sudo apt-get install python3.10-dev
 ```
 
 ## Server
@@ -31,14 +31,14 @@ sudo ln -s /usr/share/adminer/adminer.php /var/www/html
 ```
 sudo apt-get install -y python3-setuptools
 sudo apt-get install -y python3.8-dev
-python3.8 -m pip install wheel hive-nectar dataset psycopg2-binary nectarengine base36 python-dateutil
+python3.10 -m pip install wheel hive-nectar dataset psycopg2-binary nectarengine base36 python-dateutil
 ```
 
 (API on machine is using root to run gunicorn)
 ```
 sudo su
-python3.8 -m pip install gunicorn flask flask-cors flask-compress flask-caching prettytable pytz 
-python3.8 -m pip install wheel hive-nectar dataset psycopg2-binary secp256k1prp nectarengine base36 sqltap simplejson
+python3.10 -m pip install gunicorn flask flask-cors flask-compress flask-caching prettytable pytz 
+python3.10 -m pip install wheel hive-nectar dataset psycopg2-binary secp256k1prp nectarengine base36 sqltap simplejson
 python3 setup.py install
 ```
 
