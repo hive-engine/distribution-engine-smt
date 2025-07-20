@@ -173,6 +173,7 @@ if __name__ == "__main__":
                         traceback.print_exc()
                         block_range = []
                     for block_dict in block_range:
+                        print(f"Processing engine block {block_dict['blockNumber']}")
                         process_engine_block(block_dict)
                         last_engine_streamed_block = block_dict["blockNumber"]
                     current += count

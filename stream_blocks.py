@@ -266,6 +266,7 @@ if __name__ == "__main__":
                     )
                     batch_completed = True
                     for block in blocks_generator:
+                        print(f"Processing block {block.block_num}")
                         for op in block.operations:
                             op_dict = op["value"]
                             op_dict["type"] = op["type"].replace("_operation", "")
