@@ -24,6 +24,7 @@ This document details the significant changes between the `main` and `dev` branc
   - Removed Python 2 compatibility code and `__future__` imports.
   - Replaced `datetime.utcnow()` with timezone-aware `datetime.now(timezone.utc)` for more accurate timestamp handling.
   - Removed the `python-dateutil` dependency in favor of the standard library's `datetime` module.
+  - Stream scripts (`stream_blocks.py` and `stream_engine_sidechain_blocks.py`) have been refactored into dedicated Processor classes (`HiveStreamProcessor` and `EngineStreamProcessor`) for improved modularity and maintainability.
 - **Standardized Scripts:** All `run-*.sh` scripts have been updated for better compatibility and consistency.
 - **Shell Script Updates:** Reverted shell scripts to use the original `main` branch paths and standardized the Python interpreter to `python3`.
 - **Improved Logging:** Logging has been updated to be more consistent and provide better insights into the application's behavior.
