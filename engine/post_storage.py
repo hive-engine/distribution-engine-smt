@@ -2,7 +2,7 @@
 
 import logging
 from builtins import object
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)

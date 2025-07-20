@@ -79,6 +79,7 @@ def ensure_timezone_aware(dt):
         return dt.replace(tzinfo=timezone.utc)
     return dt
 
+
 @app.route("/state", methods=["GET"])
 def state():
     db = dataset.connect(databaseConnector, ensure_schema=False)
@@ -88,17 +89,31 @@ def state():
         engine_conf = confStorage.get_engine()
 
         hived_last_ts = ensure_timezone_aware(hived_conf.get("last_streamed_timestamp"))
-        engine_last_ts = ensure_timezone_aware(engine_conf.get("last_engine_streamed_timestamp"))
+        engine_last_ts = ensure_timezone_aware(
+            engine_conf.get("last_engine_streamed_timestamp")
+        )
 
-        time_delay_seconds = (datetime.now(timezone.utc) - hived_last_ts).total_seconds() if hived_last_ts else 0
-        engine_time_delay_seconds = (datetime.now(timezone.utc) - engine_last_ts).total_seconds() if engine_last_ts else 0
+        time_delay_seconds = (
+            (datetime.now(timezone.utc) - hived_last_ts).total_seconds()
+            if hived_last_ts
+            else 0
+        )
+        engine_time_delay_seconds = (
+            (datetime.now(timezone.utc) - engine_last_ts).total_seconds()
+            if engine_last_ts
+            else 0
+        )
 
         data = {
             "last_streamed_block": hived_conf.get("last_streamed_block"),
-            "last_streamed_timestamp": formatTimeString(hived_last_ts) if hived_last_ts else None,
+            "last_streamed_timestamp": formatTimeString(hived_last_ts)
+            if hived_last_ts
+            else None,
             "time_delay_seconds": time_delay_seconds,
             "engine_time_delay_seconds": engine_time_delay_seconds,
-            "engine_last_streamed_timestamp": formatTimeString(engine_last_ts) if engine_last_ts else None,
+            "engine_last_streamed_timestamp": formatTimeString(engine_last_ts)
+            if engine_last_ts
+            else None,
             "engine_last_streamed_block": engine_conf.get("last_engine_streamed_block"),
         }
         return jsonify(data)
