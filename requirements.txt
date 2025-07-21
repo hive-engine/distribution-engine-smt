@@ -1,0 +1,9 @@
+dataset
+flask
+flask-caching
+flask-compress
+flask-cors
+hive-nectar
+nectarengine
+psycopg2-binary
+sqltap

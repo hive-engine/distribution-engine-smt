@@ -1,34 +1,24 @@
 # This Python file uses the following encoding: utf-8
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-from beem.constants import STEEM_100_PERCENT
-from beem.utils import resolve_authorperm, construct_authorperm
-from engine.account_storage import AccountsDB
-from engine.post_storage import PostsTrx
-from engine.vote_storage import VotesTrx
-from engine.utils import _score
-from processors.custom_json_processor import CustomJsonProcessor, extract_user
-import time
 
 import logging
+
+from nectar.utils import construct_authorperm
+
+from processors.custom_json_processor import CustomJsonProcessor, extract_user
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 log.addHandler(logging.StreamHandler())
 
+
 class ReblogProcessor(CustomJsonProcessor):
-    """ Processor for reblog operations.
-    """
+    """Processor for reblog operations."""
 
     def __init__(self, db, token_metadata):
         super().__init__(db, token_metadata)
 
     def process(self, ops, json_data):
-        """ Main process method.
-        """
-        token_config = self.token_metadata["config"]
+        """Main process method."""
         timestamp = ops["timestamp"].replace(tzinfo=None)
 
         user = extract_user(ops, json_data)
@@ -41,11 +31,14 @@ class ReblogProcessor(CustomJsonProcessor):
         if "author" not in json_data[1] or "permlink" not in json_data[1]:
             return
 
-        authorperm = construct_authorperm(json_data[1]["author"], json_data[1]["permlink"])
+        authorperm = construct_authorperm(
+            json_data[1]["author"], json_data[1]["permlink"]
+        )
         posts = self.postTrx.get_post(authorperm)
         if len(posts) > 0 and posts[0]["parent_author"] == "":
             if "delete" in json_data[1] and json_data[1]["delete"] == "delete":
-              self.reblogsStorage.delete(user, authorperm)
+                self.reblogsStorage.delete(user, authorperm)
             else:
-              self.reblogsStorage.upsert({"account": user, "authorperm": authorperm, "timestamp": timestamp})
-
+                self.reblogsStorage.upsert(
+                    {"account": user, "authorperm": authorperm, "timestamp": timestamp}
+                )

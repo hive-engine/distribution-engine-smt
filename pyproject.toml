@@ -1,0 +1,18 @@
+[project]
+name = "distribution-engine-smt"
+version = "0.0.2"
+description = "Indexing for Hive Engine Comments Smart Contract"
+
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "dataset>=1.6.2",
+    "flask>=3.1.1",
+    "flask-caching>=2.3.1",
+    "flask-compress>=1.18",
+    "flask-cors>=6.0.1",
+    "hive-nectar>=0.0.10",
+    "nectarengine>=0.1.0",
+    "psycopg2-binary>=2.9.10",
+    "sqltap>=0.3.11",
+]
