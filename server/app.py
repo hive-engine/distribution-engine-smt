@@ -137,22 +137,33 @@ def token():
     try:
         if token:
             token_config = tokenConfigStorage.get(token)
-            token_data_object = {}
-            # fetch from contract
-            reward_pool_id = token_config["reward_pool_id"]
-            reward_pool = engine_api.find_one(
-                "comments", "rewardPools", {"_id": int(reward_pool_id)}
-            )
-            if isinstance(reward_pool, list) and len(reward_pool) > 0:
-                token_data_object["pending_rshares"] = Decimal(
-                    reward_pool[0]["pendingClaims"]
+            # Always provide a predictable shape for the frontend
+            token_data_object = {
+                "pending_rshares": Decimal(0),
+                "reward_pool": Decimal(0),
+            }
+
+            # fetch from contract if we have token config
+            if token_config and "reward_pool_id" in token_config:
+                reward_pool_id = token_config["reward_pool_id"]
+                reward_pool = engine_api.find_one(
+                    "comments", "rewardPools", {"_id": int(reward_pool_id)}
                 )
-                token_data_object["reward_pool"] = Decimal(reward_pool[0]["rewardPool"])
+                if isinstance(reward_pool, list) and len(reward_pool) > 0:
+                    token_data_object["pending_rshares"] = Decimal(
+                        reward_pool[0]["pendingClaims"]
+                    )
+                    token_data_object["reward_pool"] = Decimal(
+                        reward_pool[0]["rewardPool"]
+                    )
 
             tokenApi = Token(symbol=token, api=engine_api)
             if tokenApi:
                 token_data_object["precision"] = tokenApi["precision"]
                 token_data_object["issuer"] = tokenApi["issuer"]
+            else:
+                # Fallback precision used when token metadata cannot be fetched
+                token_data_object.setdefault("precision", 0)
             return jsonify(token_data_object)
         else:
             token_config = tokenConfigStorage.get_all()
