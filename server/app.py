@@ -150,11 +150,13 @@ def token():
                     "comments", "rewardPools", {"_id": int(reward_pool_id)}
                 )
                 if isinstance(reward_pool, list) and len(reward_pool) > 0:
+                    reward_pool = reward_pool[0]
+                if isinstance(reward_pool, dict):
                     token_data_object["pending_rshares"] = Decimal(
-                        reward_pool[0]["pendingClaims"]
+                        reward_pool["pendingClaims"]
                     )
                     token_data_object["reward_pool"] = Decimal(
-                        reward_pool[0]["rewardPool"]
+                        reward_pool["rewardPool"]
                     )
 
             tokenApi = Token(symbol=token, api=engine_api)
