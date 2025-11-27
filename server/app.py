@@ -177,11 +177,13 @@ def token():
                 )
                 token_data_object = {"token": token}
                 if isinstance(reward_pool, list) and len(reward_pool) > 0:
+                    reward_pool = reward_pool[0]
+                if isinstance(reward_pool, dict):
                     token_data_object["pending_rshares"] = Decimal(
-                        reward_pool[0]["pendingClaims"]
+                        reward_pool["pendingClaims"]
                     )
                     token_data_object["reward_pool"] = Decimal(
-                        reward_pool[0]["rewardPool"]
+                        reward_pool["rewardPool"]
                     )
                 tokenApi = Token(symbol=token, api=engine_api)
                 if tokenApi:
@@ -462,19 +464,28 @@ def fetch_and_save(c, token, postTrx, postMetadataStorage):
         "authorperm": authorperm,
         "body": c.body,
         "json_metadata": json.dumps(json_metadata) if json_metadata else None,
-        "tags": ",".join(json_metadata["tags"])
-        if json_metadata and "tags" in json_metadata
-        else None,
+        "tags": ",".join(json_metadata["tags"]) if json_metadata and "tags" in json_metadata else None,
         "parent_authorperm": f"@{c.parent_author}/{c.parent_permlink}"
         if c.parent_author
         else None,
         "children": len(replies),
         "url": f"/{root_post.category}/{root_post.authorperm}",
         "depth": c.depth,
+        "main_post": c.parent_permlink == "" or c.parent_author == "",
     }
     # print(f"postMetadataStorage.upsert({this_result})")
     postMetadataStorage.upsert(this_result)
     # print(postMetadataStorage.get(this_result["authorperm"]))
+    # print(token_post)
+
+    # In the case where metadata never updated the original post data, fix the post
+    if (not token_post["main_post"] and this_result["main_post"]) or (token_post["main_post"] and token_post["parent_permlink"] is None) or (token_post["main_post"] and token_post["desc"] is None):
+        token_post["main_post"] = True
+        token_post["tags"] = this_result["tags"]
+        token_post["parent_author"] = c.parent_author
+        token_post["parent_permlink"] = c.category
+        token_post["desc"] = c.body[:300]
+        postTrx.upsert(token_post)
     this_result.update(token_post)
     results.append(this_result)
     for reply in replies:
@@ -509,8 +520,8 @@ def get_thread():
         posts = list(postTrx.get_thread_discussions(token, author, permlink))
         if (
             refresh
-            or (len(posts) == 0)
-            or ("url" not in posts[0] or posts[0]["url"] is None)
+            #or (len(posts) == 0)
+            #or ("url" not in posts[0] or posts[0]["url"] is None)
         ):
             c = Comment(f"{author}/{permlink}", blockchain_instance=hived)
             posts = fetch_and_save(c, token, postTrx, postMetadataStorage)

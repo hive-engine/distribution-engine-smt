@@ -81,13 +81,6 @@ class HiveStreamProcessor:
 
         if delay_sec < 15:
             print(f"Blocks too recent {delay_sec} ago, waiting.")
-            self.confStorage.upsert(
-                {
-                    "last_streamed_block": current_op_block_num,
-                    "last_streamed_timestamp": ops["timestamp"],
-                }
-            )
-            self.db.commit()
             return False  # Indicate that processing should pause
 
         if (
@@ -97,13 +90,6 @@ class HiveStreamProcessor:
             print(
                 f"Waiting for engine refblock to catch up to {self.last_engine_streamed_timestamp}"
             )
-            self.confStorage.upsert(
-                {
-                    "last_streamed_block": current_op_block_num,
-                    "last_streamed_timestamp": ops["timestamp"],
-                }
-            )
-            self.db.commit()
             return False  # Indicate that processing should pause
 
         delay_string = (
