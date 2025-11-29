@@ -107,8 +107,8 @@ class HiveStreamProcessor:
 
             self.confStorage.upsert(
                 {
-                    "last_streamed_block": current_op_block_num,
-                    "last_streamed_timestamp": ops["timestamp"],
+                    "last_streamed_block": self.last_streamed_block,
+                    "last_streamed_timestamp": self.last_streamed_timestamp,
                 }
             )
             self.db.commit()
@@ -256,7 +256,7 @@ class HiveStreamProcessor:
                     tzinfo=timezone.utc
                 )  # Ensure timezone-aware
                 if not self.process_op(ops):
-                    return  # Exit if process_op returned False
+                    break  # Exit loop if process_op returned False
 
         # Final update of last streamed block and timestamp before exiting
         self.confStorage.upsert(
